@@ -1,0 +1,2923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RoboArm Control</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0a0f14;--bg2:#0d1419;--bg3:#111820;
+    --border:#1a3040;--cyan:#00bcd4;--cyan2:#4fc3f7;
+    --muted:#4a6070;--fg:#cde;--red:#ef4444;--yellow:#f59e0b;--green:#4ade80;
+  }
+  body{background:var(--bg);color:var(--fg);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+  header{background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+  .logo{display:flex;align-items:center;gap:10px}
+  .logo-badge{width:34px;height:34px;border-radius:50%;background:#00bcd420;border:1px solid #00bcd450;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:var(--cyan)}
+  .logo h1{font-size:13px;font-weight:700;letter-spacing:3px;color:var(--cyan);text-transform:uppercase}
+  .logo p{font-size:11px;color:var(--muted)}
+  .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .dot-red{background:var(--red)}
+  .dot-green{background:var(--green);box-shadow:0 0 6px var(--green)}
+  .hud{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .hud-header{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.hud-title{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:2px}
+.depth-state{font-size:10px;color:var(--muted);font-family:monospace}
+.depth-state.ready{color:var(--green)}
+.depth-state.fail{color:var(--yellow)}
+  main{display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:12px;padding:12px;max-width:1400px;margin:0 auto}
+  @media(max-width:900px){main{grid-template-columns:1fr;}}
+  .col{display:flex;flex-direction:column;gap:12px}
+
+  /* Camera */
+  .camera-body{background:#000;aspect-ratio:4/3;position:relative;display:flex;align-items:center;justify-content:center}
+  .camera-body img{width:100%;height:100%;object-fit:cover;display:block}
+  .cam-placeholder{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+  .cam-placeholder .icon{font-size:36px;opacity:.3}
+  .cam-overlay{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:flex-end;padding:10px;pointer-events:none}
+  .cam-overlay button{pointer-events:all}
+  .crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border:1px solid #00bcd460;border-radius:2px;pointer-events:none;transition:border-color .3s,box-shadow .3s}
+  .crosshair.aligning{border-color:#f59e0baa;box-shadow:0 0 8px #f59e0b60;animation:crosshair-pulse 0.8s infinite}
+  .crosshair.locked{border-color:#4ade80cc;box-shadow:0 0 12px #4ade8060}
+  .crosshair::before,.crosshair::after{content:'';position:absolute;background:#00bcd440}
+  .crosshair::before{left:0;right:0;top:50%;height:1px}
+  .crosshair::after{top:0;bottom:0;left:50%;width:1px}
+  @keyframes crosshair-pulse{0%{opacity:1}50%{opacity:.5}100%{opacity:1}}
+  .align-overlay{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);border:1px solid #f59e0b60;border-radius:4px;padding:3px 10px;font-size:11px;font-family:monospace;color:#f59e0b;pointer-events:none;display:none;white-space:nowrap}
+  .align-overlay.show{display:block}
+  .align-overlay.ok{border-color:#4ade8060;color:#4ade80}
+  .scanlines::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);pointer-events:none}
+  .depth-body{display:flex;flex-direction:column;gap:10px;padding:12px}
+  .depth-readout{display:flex;flex-direction:column;gap:8px;min-width:0}
+  .sensor-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+  .sensor-card{background:#0d1f28;border:1px solid var(--border);border-radius:5px;padding:6px 8px}
+  .sensor-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .sensor-val{font-size:14px;font-family:monospace;color:var(--cyan);line-height:1.2}
+  .xyz-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:2px 0}
+  .xyz-card{display:flex;flex-direction:column;align-items:center;background:#0d1f28;border:1px solid var(--border);border-radius:5px;padding:4px 6px;gap:1px}
+  .xyz-axis{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+  .xyz-x .xyz-axis{color:#ef4444}
+  .xyz-y .xyz-axis{color:#4ade80}
+  .xyz-z .xyz-axis{color:#00bcd4}
+  .xyz-val{font-size:15px;font-family:monospace;line-height:1;color:var(--fg)}
+  .xyz-unit{font-size:9px;color:var(--muted);font-family:monospace}
+  .depth-distance{font-size:22px;color:var(--cyan);font-family:monospace;line-height:1}
+  .depth-message{font-size:12px;color:var(--fg);line-height:1.35}
+  .depth-path{font-size:10px;color:var(--muted);font-family:monospace;line-height:1.35;word-break:break-word}
+  .reach-badge{font-size:10px;font-family:monospace;border:1px solid var(--border);border-radius:4px;padding:2px 7px;color:var(--muted)}
+  .reach-badge.ok{border-color:#4ade8050;color:var(--green);background:#4ade8010}
+  .reach-badge.no{border-color:#ef444450;color:var(--red);background:#ef444410}
+
+  /* Buttons */
+  button{cursor:pointer;font-family:inherit;border:none;outline:none;transition:all .15s}
+  .btn{padding:8px 14px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid}
+  .btn-cyan{border-color:#00bcd450;background:#00bcd415;color:var(--cyan)}
+  .btn-cyan:hover{background:#00bcd430;border-color:var(--cyan)}
+  .btn-red{border-color:#ef444450;background:#ef444415;color:var(--red)}
+  .btn-red:hover{background:#ef444430}
+  .btn-yellow{border-color:#f59e0b50;background:#f59e0b15;color:var(--yellow)}
+  .btn-yellow:hover{background:#f59e0b30}
+  .btn-primary{background:var(--cyan);color:#000;border-color:var(--cyan)}
+  .btn-primary:hover{opacity:.85}
+  button:active{transform:scale(.96)}
+  button:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+  /* D-pad */
+  .dpad{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px;margin:0 auto;width:fit-content}
+  .dpad button{border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+  .dpad .lbl{font-size:9px;font-weight:600}
+
+  /* Actions grid */
+  .actions-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .act-btn{display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 6px;border-radius:8px;border:1px solid #00bcd430;background:#00bcd410;color:var(--cyan);font-size:11px;font-weight:600}
+  .act-btn .icon{font-size:18px}
+  .act-btn:hover{background:#00bcd425;border-color:#00bcd460}
+  .grip-tune{margin-top:8px;display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center}
+  .grip-tune-status{min-width:88px;text-align:center;font-size:11px;font-family:monospace;color:var(--fg);background:#0d1f28;border:1px solid var(--border);border-radius:6px;padding:7px 8px}
+  .grip-tune-status span{display:block;color:var(--cyan);font-size:13px;font-weight:700;text-transform:capitalize}
+  .grip-tune .btn{height:40px;justify-content:center}
+
+  /* Sliders */
+  .slider-row{margin-bottom:16px}
+  .slider-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .slider-label{font-size:13px;font-weight:600}
+  .slider-sub{font-size:11px;color:var(--muted);margin-left:6px}
+  .slider-val{font-size:12px;font-family:monospace;padding:2px 8px;background:#1a3040;border-radius:4px}
+  .angle-controls{display:flex;align-items:center;gap:6px}
+  .angle-input-wrap{display:flex;align-items:center;gap:3px;padding:2px 7px;background:#0d1f28;border:1px solid var(--border);border-radius:5px}
+  .angle-input{width:54px;background:transparent;border:none;color:var(--fg);font-family:monospace;font-size:12px;text-align:right;outline:none}
+  .angle-input:focus{color:var(--cyan)}
+  .angle-unit{font-size:11px;color:var(--muted);font-family:monospace}
+  .angle-input::-webkit-outer-spin-button,.angle-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .angle-input[type=number]{appearance:textfield;-moz-appearance:textfield}
+  .slider-track{position:relative;height:8px;background:#1a2a35;border-radius:4px;margin-bottom:4px}
+  .slider-fill{height:100%;border-radius:4px;transition:width .05s}
+  .slider-thumb{position:absolute;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;border:2px solid;background:rgba(0,0,0,.5);pointer-events:none;box-shadow:0 0 8px currentColor;transition:left .05s}
+  .slider-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;margin:0}
+  .slider-range{display:flex;justify-content:space-between;font-size:10px;color:#2a4050}
+
+  /* Arm 3D model */
+  .arm3d-stage{position:relative;height:300px;background:#050b10;overflow:hidden}
+  #armCanvas{width:100%;height:100%;display:block;touch-action:none}
+  .arm3d-fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted);font-size:12px;text-align:center;padding:18px}
+  .arm3d-readout{position:absolute;left:10px;bottom:8px;font-size:10px;font-family:monospace;color:#1a8ea0;background:rgba(5,11,16,.72);border:1px solid #00bcd420;border-radius:4px;padding:4px 6px;pointer-events:none}
+  .arm3d-gizmo{position:absolute;top:10px;left:10px;width:52px;height:52px;perspective:240px;pointer-events:none;z-index:5}
+  .arm3d-gizmo-cube{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .06s linear}
+  .arm3d-gizmo-face{position:absolute;width:52px;height:52px;display:flex;align-items:center;justify-content:center;font:700 8.5px/1 monospace;letter-spacing:.4px;border:1px solid rgba(0,188,212,.6);color:#d6f3fa;background:rgba(0,188,212,.16);box-shadow:inset 0 0 8px rgba(0,188,212,.08)}
+  .arm3d-gizmo-face.top{background:rgba(0,188,212,.32);transform:rotateX(90deg) translateZ(26px)}
+  .arm3d-gizmo-face.front{background:rgba(0,188,212,.16);transform:translateZ(26px)}
+  .arm3d-gizmo-face.right{background:rgba(0,188,212,.24);transform:rotateY(90deg) translateZ(26px)}
+  .arm3d-path-label{position:absolute;right:10px;top:8px;max-width:min(280px,calc(100% - 20px));font-size:10px;font-family:monospace;line-height:1.5;color:#b3e5fc;background:rgba(5,11,16,.82);border:1px solid #00bcd455;border-radius:4px;padding:5px 8px;pointer-events:none;white-space:pre-wrap}
+
+  /* Voice */
+  .mic-btn{width:64px;height:64px;border-radius:50%;border:2px solid #00bcd450;background:#00bcd410;color:var(--cyan);font-size:24px;display:flex;align-items:center;justify-content:center;margin:0 auto}
+  .mic-btn.listening{border-color:var(--red);background:#ef444420;color:var(--red);animation:pulse 1.2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 #ef444460}70%{box-shadow:0 0 0 12px transparent}100%{box-shadow:0 0 0 0 transparent}}
+  @keyframes floor-flash{0%,100%{opacity:1}50%{opacity:0.4}}
+  .transcript{background:#1a2a35;border-radius:6px;padding:8px 12px;font-size:12px;font-family:monospace;color:var(--fg);min-height:32px;margin-top:8px}
+  .voice-hints{margin-top:10px;border-top:1px solid var(--border);padding-top:10px}
+  .voice-hints p{font-size:11px;color:var(--muted);margin-bottom:6px}
+  .hint{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-bottom:3px}
+  .hint::before{content:'';width:5px;height:5px;border-radius:50%;background:#00bcd450;flex-shrink:0}
+
+  /* Status bar */
+  .status-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+  .pos-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .pos-card{background:#0d1f28;border-radius:6px;padding:10px 12px}
+  .pos-card p{font-size:10px;color:var(--muted);text-transform:capitalize}
+  .pos-card span{font-size:20px;font-family:monospace;color:var(--cyan);display:block}
+  .feedback-panel{display:none;margin-top:12px;border:1px solid #00bcd430;background:#00bcd408;border-radius:8px;padding:12px}
+  .feedback-panel.open{display:block}
+  .feedback-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
+  .feedback-text{font-size:12px;color:var(--fg);line-height:1.35;margin-bottom:10px}
+  .feedback-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .feedback-actions.triple{grid-template-columns:1fr 1fr 1fr}
+  .feedback-actions.five{grid-template-columns:repeat(5,1fr)}
+  .feedback-actions.single{grid-template-columns:1fr}
+  @media(max-width:720px){.feedback-actions.five{grid-template-columns:1fr 1fr}}
+  @media(max-width:520px){.feedback-actions.triple,.feedback-actions.five{grid-template-columns:1fr}}
+
+  /* Settings modal */
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+  .modal.open{display:flex}
+  .modal-box{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:420px;max-width:95vw}
+  .modal-box h2{font-size:16px;margin-bottom:16px;color:var(--cyan)}
+  input[type=text]{width:100%;padding:10px 14px;background:#1a2a35;border:1px solid var(--border);border-radius:6px;color:var(--fg);font-size:14px;font-family:monospace}
+  input[type=text]:focus{outline:none;border-color:#00bcd460}
+  label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px}
+  .modal-hint{font-size:11px;color:var(--muted);margin-top:6px}
+  .modal-hint code{background:#1a2a35;padding:1px 5px;border-radius:3px;color:var(--cyan)}
+  .port-table{background:#0d1f28;border-radius:6px;padding:12px;margin-top:12px}
+  .port-row{display:flex;align-items:center;gap:10px;font-size:12px;margin-bottom:6px}
+  .port-badge{background:#00bcd420;color:var(--cyan);padding:2px 8px;border-radius:4px;font-family:monospace;font-size:11px;flex-shrink:0}
+  .test-result{border-radius:6px;padding:10px 14px;font-size:13px;margin-top:10px}
+  .test-ok{background:#4ade8015;border:1px solid #4ade8030;color:var(--green)}
+  .test-fail{background:#ef444415;border:1px solid #ef444430;color:var(--red)}
+  .modal-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+  .sep{height:1px;background:var(--border);margin:14px 0}
+
+  /* Calibration panel */
+  .cal-panel{background:#0d1f28;border:1px solid #f59e0b40;border-radius:8px;padding:14px;margin-top:8px}
+  .cal-title{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#f59e0b;margin-bottom:10px}
+  .cal-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .cal-label{font-size:11px;color:var(--muted);min-width:140px}
+  .cal-input{width:75px;background:#1a2a35;border:1px solid var(--border);border-radius:4px;color:var(--fg);font-family:monospace;font-size:12px;padding:4px 8px;text-align:right}
+  .cal-unit{font-size:10px;color:var(--muted);font-family:monospace}
+  .cal-badge{font-size:10px;font-family:monospace;padding:2px 8px;border-radius:4px;background:#f59e0b20;border:1px solid #f59e0b40;color:#f59e0b}
+  .cal-badge.good{background:#4ade8020;border-color:#4ade8040;color:var(--green)}
+  .grab-err-display{font-size:13px;font-family:monospace;color:#f59e0b;padding:6px 10px;background:#f59e0b10;border:1px solid #f59e0b30;border-radius:5px}
+  .grab-err-display.zeroed{color:var(--green);background:#4ade8010;border-color:#4ade8030}
+  .status-floor{color:var(--red) !important;font-weight:700;animation:floor-flash 0.6s 3}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-badge">ARM</div>
+    <div>
+      <h1>RoboArm Control</h1>
+      <p>4-DOF Robot Arm Interface</p>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end">
+    <span id="connStatus"><span class="status-dot dot-red" id="headerDot"></span><span id="connLabel">Pi not configured</span></span>
+    <button class="btn btn-yellow" id="depthBtn" onclick="toggleDepth()">VL53L0X: ON</button>
+    <button class="btn btn-cyan" id="depthScanBtn" onclick="triggerDepthScan()" title="Read VL53L0X distance now">📡 Sensor Read</button>
+    <button class="btn btn-cyan" onclick="openSettings()">⚙ Settings</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: Camera + Voice -->
+  <div class="col">
+    <div class="hud">
+      <div class="hud-header">
+        <span class="hud-title">Live Camera Feed</span>
+        <span style="display:flex;gap:10px;align-items:center">
+          <span id="depthState" class="depth-state">VL53L0X: --</span>
+          <span id="camAddr" style="font-size:11px;color:var(--muted);font-family:monospace"></span>
+        </span>
+      </div>
+      <div class="camera-body scanlines" id="camBox">
+        <div class="cam-placeholder" id="camPlaceholder">
+          <div class="icon">📷</div>
+          <div>Configure Pi IP in Settings</div>
+          <button class="btn btn-cyan" style="margin-top:6px" onclick="openSettings()">Open Settings</button>
+        </div>
+        <img id="camImg" src="" alt="Live feed" style="display:none" onerror="camError()" onload="camLoaded()" />
+        <div class="crosshair" id="camCross" style="display:none"></div>
+        <div class="align-overlay" id="alignOverlay"></div>
+        <div class="cam-overlay">
+          <button class="btn btn-cyan" id="pickBtn" style="font-size:12px;display:none">⚡ Pick Up</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud">
+      <div class="hud-header">
+        <span class="hud-title">VL53L0X + Camera (behind gripper)</span>
+        <span id="reachState" class="reach-badge">--</span>
+      </div>
+      <div class="depth-body">
+        <div class="depth-readout">
+          <div id="depthDistance" class="depth-distance">-- cm</div>
+          <div id="depthMessage" class="depth-message">No sensor reading yet</div>
+          <div class="sensor-grid">
+        <div class="sensor-card"><div class="sensor-label">Sensor → object</div><div id="sensorRaw" class="sensor-val">-- cm</div></div>
+        <div class="sensor-card"><div class="sensor-label">Jaw → object</div><div id="sensorJaw" class="sensor-val">-- cm</div></div>
+        <div class="sensor-card"><div class="sensor-label">Measurement time</div><div id="sensorEcho" class="sensor-val">-- µs</div></div>
+        <div class="sensor-card"><div class="sensor-label">Camera / Sensor</div><div id="sensorDescent" class="sensor-val">-- cm</div></div>
+        <div class="sensor-card"><div class="sensor-label">GPIO SDA / SCL</div><div id="sensorPins" class="sensor-val">-- / --</div></div>
+        <div class="sensor-card"><div class="sensor-label">Grasp (down mode)</div><div id="sensorClearance" class="sensor-val">--</div></div>
+        <div class="sensor-card"><div class="sensor-label">Object height</div><div id="objectHeight" class="sensor-val">--</div></div>
+          </div>
+          <div class="xyz-grid">
+            <div class="xyz-card xyz-x"><span class="xyz-axis">X</span><span id="coord-x" class="xyz-val">--</span><span class="xyz-unit">cm</span></div>
+            <div class="xyz-card xyz-y"><span class="xyz-axis">Y</span><span id="coord-y" class="xyz-val">--</span><span class="xyz-unit">cm</span></div>
+            <div class="xyz-card xyz-z"><span class="xyz-axis">Z</span><span id="coord-z" class="xyz-val">--</span><span class="xyz-unit">cm</span></div>
+          </div>
+          <div id="depthPath" class="depth-path">path: --</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud">
+      <div class="hud-header"><span class="hud-title">Voice Commands</span></div>
+      <div style="padding:14px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+          <button class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Click to speak">🎤</button>
+          <span id="micStatus" style="font-size:11px;color:var(--muted)">Tap to speak</span>
+        </div>
+        <div class="transcript" id="transcript"></div>
+        <div class="voice-hints">
+          <p>Say things like:</p>
+          <div class="hint">up / down / left / right</div>
+          <div class="hint">wave</div>
+          <div class="hint">grab / pick up</div>
+          <div class="hint">open / close</div>
+          <div class="hint">wrist left / wrist right</div>
+          <div class="hint">home / reset</div>
+          <div class="hint">track / stop</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: Arm diagram + Joints -->
+  <div class="col">
+    <div class="hud">
+      <div class="hud-header">
+        <span class="hud-title">Arm Diagram</span>
+        <span style="font-size:11px;color:var(--muted)">Live joint visualization</span>
+      </div>
+      <div class="arm3d-stage" id="arm3dStage">
+        <canvas id="armCanvas"></canvas>
+        <div class="arm3d-fallback" id="arm3dFallback">3D model unavailable</div>
+        <div class="arm3d-path-label" id="arm3dPathLabel">Grab path: --</div>
+        <div class="arm3d-readout" id="arm3dReadout"></div>
+        <div class="arm3d-gizmo" id="arm3dGizmo">
+          <div class="arm3d-gizmo-cube" id="arm3dGizmoCube">
+            <div class="arm3d-gizmo-face top">TOP</div>
+            <div class="arm3d-gizmo-face front">FRONT</div>
+            <div class="arm3d-gizmo-face right">RIGHT</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud" style="padding:16px">
+      <div class="hud-header" style="margin:-16px -16px 14px;padding:8px 14px"><span class="hud-title">Joint Control</span></div>
+      <div id="sliders"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Buttons + Position -->
+  <div class="col">
+    <div class="hud" style="padding:14px">
+      <div class="hud-header" style="margin:-14px -14px 12px;padding:8px 14px">
+        <span class="hud-title">Movement</span>
+        <div class="status-bar"><span class="status-dot" id="connDot" style="background:var(--red)"></span><span id="statusTxt">Ready</span></div>
+      </div>
+
+      <div class="dpad">
+        <div></div>
+        <button class="btn btn-cyan" onclick="sendCommand('up')"><span>▲</span><span class="lbl">Up</span></button>
+        <div></div>
+        <button class="btn btn-cyan" onclick="sendCommand('left')"><span>◀</span><span class="lbl">Left</span></button>
+        <button class="btn btn-yellow" onclick="sendCommand('home')"><span>⌂</span><span class="lbl">Home</span></button>
+        <button class="btn btn-cyan" onclick="sendCommand('right')"><span>▶</span><span class="lbl">Right</span></button>
+        <div></div>
+        <button class="btn btn-cyan" onclick="sendCommand('down')"><span>▼</span><span class="lbl">Down</span></button>
+        <div></div>
+      </div>
+
+      <div style="margin-top:14px">
+        <p style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">Actions</p>
+        <div class="actions-grid">
+          <button class="act-btn" onclick="sendCommand('wave')"><span class="icon">👋</span>Wave</button>
+          <button class="act-btn" id="trackBtn" onclick="doTrack()"><span class="icon">🎯</span><span id="trackBtnText">Track</span></button>
+          <button class="act-btn" onclick="sendCommand('open')"><span class="icon">✌</span>Open</button>
+          <button class="act-btn" onclick="sendCommand('close')"><span class="icon">✊</span>Close</button>
+          <button class="act-btn" onclick="sendCommand('wrist left')"><span class="icon">↺</span>Wrist ←</button>
+          <button class="act-btn" onclick="sendCommand('wrist right')"><span class="icon">↻</span>Wrist →</button>
+        </div>
+      </div>
+
+      <button class="btn btn-red" style="width:100%;margin-top:12px;padding:10px;font-size:12px;letter-spacing:2px" onclick="emergencyStop()">⛔ STOP</button>
+      <div class="grip-tune">
+        <button class="btn btn-yellow" onclick="adjustGripTune(-1)">Softer</button>
+        <div class="grip-tune-status">Grip<span id="gripTuneName">normal</span></div>
+        <button class="btn btn-cyan" onclick="adjustGripTune(1)">Harder</button>
+      </div>
+      <div class="feedback-panel" id="grabFeedback">
+        <div class="feedback-title">Grab feedback</div>
+        <div class="feedback-text" id="grabFeedbackText">How did that grab go?</div>
+        <div class="feedback-actions five" id="grabFeedbackActions">
+          <button class="btn btn-red" onclick="grabWasTooLow()">Too low</button>
+          <button class="btn btn-yellow" onclick="grabWasUnsuccessful()">Missed high</button>
+          <button class="btn btn-yellow" onclick="grabWasTooClose()">Too close</button>
+          <button class="btn btn-yellow" onclick="grabWasTooFar()">Too far</button>
+          <button class="btn btn-cyan" onclick="grabWasSuccessful()">Grab was successful</button>
+        </div>
+      </div>
+
+      <!-- ── Calibration Panel ──────────────────────────────────── -->
+      <div style="margin-top:10px">
+        <button class="btn btn-yellow" style="width:100%;font-size:11px" onclick="toggleCalPanel()">
+          🎯 Gripper Calibration
+        </button>
+        <div class="cal-panel" id="calPanel" style="display:none">
+          <div class="cal-title">📐 Camera-Gripper Alignment</div>
+
+          <!-- Live grab error display -->
+          <div style="margin-bottom:10px">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px">
+              Live alignment error (centroid → crosshair):
+            </div>
+            <div id="grabErrDisplay" class="grab-err-display">No detection</div>
+          </div>
+
+          <!-- GRIPPER_X_OFFSET_CM -->
+          <div class="cal-row">
+            <span class="cal-label">Gripper X offset</span>
+            <input type="number" class="cal-input" id="cal-gripper-x" value="0.0" step="0.5"
+                   title="Positive = gripper is to the RIGHT of camera centre">
+            <span class="cal-unit">cm</span>
+            <button class="btn btn-cyan" style="font-size:10px;padding:4px 8px"
+                    onclick="applyCalOffset('gripper_x_cm', 'cal-gripper-x')">Apply</button>
+          </div>
+
+          <!-- GRIPPER_Y_OFFSET_CM -->
+          <div class="cal-row">
+            <span class="cal-label">Gripper Y offset</span>
+            <input type="number" class="cal-input" id="cal-gripper-y" value="0.0" step="0.5"
+                   title="Positive = gripper is BELOW camera centre">
+            <span class="cal-unit">cm</span>
+            <button class="btn btn-cyan" style="font-size:10px;padding:4px 8px"
+                    onclick="applyCalOffset('gripper_y_cm', 'cal-gripper-y')">Apply</button>
+          </div>
+
+          <!-- CAMERA_CENTER_OFFSET_PX -->
+          <div class="cal-row">
+            <span class="cal-label">Crosshair X shift</span>
+            <input type="number" class="cal-input" id="cal-cam-px" value="0.0" step="1"
+                   title="Shifts the green crosshair left/right. Positive = right.">
+            <span class="cal-unit">px</span>
+            <button class="btn btn-cyan" style="font-size:10px;padding:4px 8px"
+                    onclick="applyCalOffset('camera_center_px', 'cal-cam-px')">Apply</button>
+          </div>
+          <div class="cal-row">
+            <span class="cal-label">Crosshair Y shift</span>
+            <input type="number" class="cal-input" id="cal-cam-y-px" value="0.0" step="1"
+                   title="Shifts the green crosshair up/down. Positive = down.">
+            <span class="cal-unit">px</span>
+            <button class="btn btn-cyan" style="font-size:10px;padding:4px 8px"
+                    onclick="applyCalOffset('camera_center_y_px', 'cal-cam-y-px')">Apply</button>
+          </div>
+
+          <div class="sep"></div>
+          <div class="cal-title">📏 Depth Close-Range Correction (5–40 cm)</div>
+
+          <!-- Auto-compute from measurement -->
+          <div class="cal-row" style="flex-wrap:wrap;gap:6px">
+            <span class="cal-label">Real distance</span>
+            <input type="number" class="cal-input" id="cal-depth-real" value="15" step="0.5"
+                   title="Actual measured distance to object in cm">
+            <span class="cal-unit">cm</span>
+          </div>
+          <div class="cal-row" style="flex-wrap:wrap;gap:6px">
+            <span class="cal-label">Predicted distance</span>
+            <input type="number" class="cal-input" id="cal-depth-pred" value="25" step="0.5"
+                   title="What the depth readout showed">
+            <span class="cal-unit">cm</span>
+            <button class="btn btn-yellow" style="font-size:10px;padding:4px 8px"
+                    onclick="autoDepthScale()">Auto Scale</button>
+          </div>
+          <div class="cal-row">
+            <span class="cal-label">Close-range scale</span>
+            <input type="number" class="cal-input" id="cal-cr-scale" value="1.0" step="0.05"
+                   min="0.1" max="5.0"
+                   title="Multiplier applied when depth ≤ 40 cm">
+            <span class="cal-unit">×</span>
+            <button class="btn btn-cyan" style="font-size:10px;padding:4px 8px"
+                    onclick="applyCalOffset('close_range_scale', 'cal-cr-scale')">Apply</button>
+          </div>
+
+          <div class="sep"></div>
+          <div class="cal-title">🔧 Auto-Correct from Grab Error</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+            After a missed grab, enter how far off it was. The offsets will auto-update.
+          </div>
+          <div class="cal-row">
+            <span class="cal-label">Grab error X</span>
+            <input type="number" class="cal-input" id="cal-err-x" value="0.0" step="0.5"
+                   title="Positive = arm grabbed too far RIGHT">
+            <span class="cal-unit">cm</span>
+          </div>
+          <div class="cal-row">
+            <span class="cal-label">Grab error Y</span>
+            <input type="number" class="cal-input" id="cal-err-y" value="0.0" step="0.5"
+                   title="Positive = arm grabbed too LOW / below the object">
+            <span class="cal-unit">cm</span>
+          </div>
+          <div class="cal-row">
+            <span class="cal-label">Grab depth estimate</span>
+            <input type="number" class="cal-input" id="cal-err-depth" value="20" step="1"
+                   title="What the depth readout showed during the grab">
+            <span class="cal-unit">cm</span>
+            <button class="btn btn-yellow" style="font-size:10px;padding:4px 8px"
+                    onclick="autoGrabCorrect()">Auto-Correct</button>
+          </div>
+
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn btn-red" style="font-size:10px;flex:1"
+                    onclick="resetCalibration()">Reset All</button>
+            <button class="btn btn-cyan" style="font-size:10px;flex:1"
+                    onclick="fetchCalibration()">Refresh</button>
+          </div>
+          <div id="calStatus" style="font-size:10px;color:var(--muted);font-family:monospace;margin-top:6px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud" style="padding:14px">
+      <div class="hud-header" style="margin:-14px -14px 10px;padding:8px 14px"><span class="hud-title">Arm Position</span></div>
+      <div class="pos-grid">
+        <div class="pos-card"><p>Base</p><span id="pos-base">90°</span></div>
+        <div class="pos-card"><p>Arm</p><span id="pos-arm">90°</span></div>
+        <div class="pos-card"><p>Wrist</p><span id="pos-wrist">90°</span></div>
+        <div class="pos-card"><p>Gripper</p><span id="pos-grip">30°</span></div>
+      </div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)">
+        <span>Grip current:</span>
+        <span id="posGripCurrent" style="font-family:monospace;font-size:12px;color:var(--cyan)">-- mA</span>
+      </div>
+
+      <!-- Pickup snapshot — shown when grab is triggered -->
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-cyan" style="font-size:10px;flex:1;min-width:120px" onclick="saveCurrentHome()">Set Home Here</button>
+          <button class="btn btn-yellow" style="font-size:10px;flex:1;min-width:120px" onclick="sendCommand('home')">Go Home</button>
+          <button class="btn btn-red" style="font-size:10px;flex:1;min-width:120px" onclick="resetHomeAngles()">Reset Home</button>
+        </div>
+        <div id="homeAngles" style="font-size:10px;color:var(--muted);font-family:monospace;margin-top:6px">home: default</div>
+      </div>
+
+      <div id="snapPanel" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <p style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">📸 Position at pickup trigger</p>
+        <div class="pos-grid">
+          <div class="pos-card" style="border-color:#00bcd430"><p>Base</p><span id="snap-base" style="font-size:16px;color:#00bcd4">--</span></div>
+          <div class="pos-card" style="border-color:#00bcd430"><p>Arm</p><span id="snap-arm"  style="font-size:16px;color:#00bcd4">--</span></div>
+          <div class="pos-card" style="border-color:#00bcd430"><p>Wrist</p><span id="snap-wrist" style="font-size:16px;color:#00bcd4">--</span></div>
+          <div class="pos-card" style="border-color:#00bcd430"><p>Gripper</p><span id="snap-grip" style="font-size:16px;color:#00bcd4">--</span></div>
+        </div>
+        <p id="snapTime" style="font-size:10px;color:var(--muted);font-family:monospace;margin-top:4px"></p>
+      </div>
+    </div>
+
+    <div id="noPiNotice" class="hud" style="padding:14px;border-color:#f59e0b30;background:#f59e0b08">
+      <p style="color:var(--yellow);font-weight:600;margin-bottom:4px">Pi not configured</p>
+      <p style="font-size:12px;color:var(--muted)">Open Settings to enter your Pi IP. The arm diagram works in demo mode without a connection.</p>
+    </div>
+  </div>
+</main>
+
+<!-- Settings Modal -->
+<div class="modal" id="settingsModal">
+  <div class="modal-box">
+    <h2>⚙ Settings — Raspberry Pi Connection</h2>
+    <label for="piIpInput">Pi IP Address</label>
+    <input type="text" id="piIpInput" placeholder="e.g. 192.168.1.42" />
+    <p class="modal-hint">Find your Pi's IP by running <code>hostname -I</code> on the Pi.</p>
+    <div class="sep"></div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Run the Pi script, then test the connection:</p>
+    <div class="port-table">
+      <div class="port-row"><span class="port-badge">8080</span><span style="color:var(--muted)">MJPEG camera stream</span></div>
+      <div class="port-row"><span class="port-badge">8081</span><span style="color:var(--muted)">HTTP command API (POST /command, POST /joint)</span></div>
+    </div>
+    <div id="testResult" style="display:none"></div>
+    <div class="modal-actions">
+      <button class="btn btn-cyan" onclick="testConnection()" id="testBtn">Test Connection</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+      <a href="pi_arm_server_v18.py" download><button class="btn btn-cyan" type="button">⬇ Download Pi Script</button></a>
+      <button class="btn" style="border-color:var(--border);background:transparent;color:var(--muted)" onclick="closeSettings()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="three.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/three@0.160.0/build/three.min.js'"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────
+// Home is vertical-up at the physical servo center.
+const DEFAULTS = { base:90, arm:90, wrist:90, grip:30 };
+const FACTORY_HOME = { ...DEFAULTS };
+const VISUAL_HOME_POSE = Object.freeze({ base:90, arm:90, wrist:90, grip:30 });
+// Gripper range capped at 120° for this MG996R flex-gripper setup.
+// Adaptive close stops at contact+backoff, so the jaw never actually reaches the ceiling on an object.
+const arm = { ...DEFAULTS };
+let forceVisualHomePose = false;
+// FIX: piIp init — never use empty string (falsy) as a real IP
+let piIp = localStorage.getItem('pi_ip') || '';
+if (!piIp && location.hostname && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  piIp = location.hostname;
+}
+piIp = normalizePiHost(piIp);
+let connected = false;
+let cooldowns = {};
+let jointTimers = {};
+let pollTimer   = null;
+let detPollTimer = null;
+const _dragging = {};
+const SERVER_STEP = 30;
+const JOINT_SEND_DEBOUNCE = 300;  // was 90ms — caused servo jitter from rapid overlapping moves
+const CONTINUOUS_JOINTS = new Set([]);
+const WRIST_BUTTON_STEP = 10;
+const WRIST_STOP_DELAY_MS = 300;  // FIX: was 850ms — far too long; blocked rapid button presses. 300ms = 180ms move + small margin
+const MAX_WRIST_SLIDER_STEPS = 9;
+const CONTINUOUS_SYNC_HOLD_MS = 2200;
+const TRACK_PX_DEADBAND = 40;   // compatibility alias for older tracking code
+const track_px = TRACK_PX_DEADBAND;  // prevents "track_px is not defined" errors
+
+const STATUS_POLL_MS = 1500;   // poll real servo positions from Pi
+const DET_POLL_MS    = 800;    // poll detections for UI labels
+
+function normalizePiHost(value) {
+  let raw = String(value || '').trim();
+  if (!raw) return '';
+  raw = raw.replace(/^https?:\/\//i, '').replace(/^\/\//, '');
+  raw = raw.split(/[/?#]/)[0];
+  raw = raw.replace(/:(8080|8081)$/i, '');
+  return raw.trim();
+}
+
+function apiUrl(path) {
+  return `http://${piIp}:8081${path}`;
+}
+
+function streamUrl(path = '/stream') {
+  return `http://${piIp}:8080${path}`;
+}
+const continuousSyncHoldUntil = {};
+let depthUiState = { enabled: false, ready: false, failed: false, loading: false };
+let depthLoadingStart = 0;  // FIX: track when loading started so we can timeout the LOADING display
+const DEPTH_SCAN_TIMEOUT_MS = 12000;
+const DEPTH_LOADING_TIMEOUT_MS = 45000;  // 45s — if still loading after this, show WARNING not LOADING
+
+function setDepthButtonState(model) {
+  const btn = document.getElementById('depthBtn');
+  if (!btn || !model) return;
+  const prevEnabled = depthUiState.enabled;
+  depthUiState = {
+    enabled: !!model.enabled,
+    ready: !!model.ready,
+    failed: !!model.failed,
+    loading: !!model.loading,
+  };
+  // Track loading start time for timeout display
+  if (model.loading && !model.ready) {
+    if (!depthLoadingStart) depthLoadingStart = Date.now();
+  } else {
+    depthLoadingStart = 0;
+  }
+  const loadingTooLong = depthLoadingStart > 0 && (Date.now() - depthLoadingStart) > DEPTH_LOADING_TIMEOUT_MS;
+  btn.classList.remove('btn-cyan', 'btn-yellow', 'btn-red');
+  btn.disabled = false;  // FIX: always re-enable button after state update
+  if (model.failed) {
+    btn.classList.add('btn-red');
+    btn.textContent = 'VL53L0X: ERROR';
+    btn.title = model.last_error || 'VL53L0X init failed';
+  } else if (model.enabled && model.ready && model.measurement_ok) {
+    btn.classList.add('btn-cyan');
+    btn.textContent = 'VL53L0X: ON';
+    btn.title = 'Sensor returning measurements';
+  } else if (model.enabled && model.gpio_ok && !model.measurement_ok) {
+    btn.classList.add('btn-yellow');
+    btn.textContent = 'VL53L0X: WARMING';
+    btn.title = 'GPIO OK — waiting for measurements';
+  } else if (model.enabled) {
+    btn.classList.add('btn-cyan');
+    btn.textContent = 'VL53L0X: ON';
+    btn.title = 'VL53L0X enabled';
+  } else {
+    btn.classList.add('btn-yellow');
+    btn.textContent = 'VL53L0X: OFF';
+    btn.title = 'Turn VL53L0X on for depth';
+  }
+}
+async function toggleDepth(forceState = null) {
+  if (!piIp) { setStatus('Set the Pi IP in Settings first'); return; }
+  const desired = forceState === null ? !depthUiState.enabled : !!forceState;
+  const btn = document.getElementById('depthBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(apiUrl('/depth'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: desired }),
+      mode: 'cors',
+      cache: 'no-store'
+    });
+    if (r.ok) {
+      const d = await r.json();
+      setConnected(true);
+      if (d.depth_model) updateDepthState(d.depth_model);
+      if (d.status) setStatus(d.status);
+    } else {
+      setStatus(`VL53L0X toggle failed: ${r.status}`);
+    }
+  } catch (err) {
+    setStatus('Pi unreachable: VL53L0X toggle');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function triggerDepthScan() {
+  if (!piIp) { setStatus('Set Pi IP in Settings first'); return; }
+  const btn = document.getElementById('depthScanBtn');
+  const msgEl = document.getElementById('depthMessage');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEPTH_SCAN_TIMEOUT_MS);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Reading…'; }
+  if (msgEl) msgEl.textContent = 'Reading VL53L0X…';
+  try {
+    const r = await fetch(apiUrl('/depth/scan'), {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    let d = {};
+    try {
+      d = await r.json();
+    } catch {
+      d = {};
+    }
+    if (!r.ok) {
+      const err = d.error || `HTTP ${r.status}`;
+      setStatus(`Sensor read failed: ${err}`);
+      if (msgEl) msgEl.textContent = err;
+      return;
+    }
+    setConnected(true);
+    if (d.error) {
+      setStatus(String(d.error));
+      if (msgEl) msgEl.textContent = String(d.error);
+      return;
+    }
+    if (d.depth_result) {
+      updateDepthResult(d.depth_result);
+      const m = d.depth_result.message || (d.depth_result.ok ? 'Sensor read OK' : 'Sensor read failed');
+      setStatus(m);
+    } else {
+      setStatus('Sensor read: empty response from Pi');
+      if (msgEl) msgEl.textContent = 'No depth_result from /depth/scan';
+    }
+  } catch (err) {
+    const timedOut = err && err.name === 'AbortError';
+    const message = timedOut
+      ? `Sensor read timed out after ${Math.round(DEPTH_SCAN_TIMEOUT_MS / 1000)}s (check Pi server/logs)`
+      : `Sensor read error: ${err.message} (Pi reachable? Port 8081?)`;
+    setStatus(message);
+    if (msgEl) msgEl.textContent = message;
+  } finally {
+    clearTimeout(timeoutId);
+    if (btn) { btn.disabled = false; btn.textContent = '📡 Sensor Read'; }
+  }
+}
+const angleCommitLocks = {};
+const committedArm = { ...DEFAULTS };
+
+// ── Joint configs ──────────────────────────────────────────────
+const JOINTS = [
+  { key:'base',  label:'Base',    min:10,  max:170, color:'#00bcd4', desc:'Rotate left / right' },
+  // FIX: min was -50. The Pi reverses this joint (servo_angle = 180 - angle),
+  // so anything below 0 mapped to an out-of-range servo pulse that got
+  // silently clamped on the server — the real arm froze while this slider
+  // (and the 3D model's floor prediction) kept moving. 0 is the true minimum.
+  { key:'arm',   label:'Arm',     min:90, max:180, color:'#4fc3f7', desc:'90°=vertical home · direct servo angle', floorDeg:null },
+  { key:'wrist', label:'Wrist',   min:0,   max:180, color:'#81d4fa', desc:'Digital servo angle' },
+  { key:'grip',  label:'Gripper', min:30,  max:120, color:'#b3e5fc', desc:'Open(30°) → Close(120°) — MG996R flexible gripper (adaptive contact stop)' },
+];
+
+// FIX: clamp reads JOINTS limits instead of hardcoding
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function jointMin(key) { return JOINTS.find(j=>j.key===key)?.min ?? 0; }
+function jointMax(key) { return JOINTS.find(j=>j.key===key)?.max ?? 180; }
+
+function holdContinuousJoint(key) {
+  if (CONTINUOUS_JOINTS.has(key)) {
+    continuousSyncHoldUntil[key] = Date.now() + CONTINUOUS_SYNC_HOLD_MS;
+  }
+}
+
+function setVisualHomePoseForced(forced) {
+  forceVisualHomePose = !!forced;
+}
+
+function mergeServerPosition(position) {
+  if (!position) return;
+  const now = Date.now();
+  JOINTS.forEach(j => {
+    if (!(j.key in position)) return;
+    const serverVal = Number(position[j.key]);
+    if (!Number.isFinite(serverVal)) return;
+    if (typeof _dragging !== 'undefined' && _dragging[j.key]) return;
+    if (CONTINUOUS_JOINTS.has(j.key) && now < (continuousSyncHoldUntil[j.key] || 0)) return;
+    arm[j.key] = clamp(serverVal, j.min, j.max);
+    committedArm[j.key] = arm[j.key];
+  });
+  syncUI();
+}
+
+function _setArmIfFkSafe(newArm, newWrist = arm.wrist, label = 'arm target') {
+  if (!_fk_safe(newArm, newWrist)) {
+    const [worst, h] = _fk_worst_segment(newArm, newWrist);
+    setStatus(`Blocked ${label}: would hit floor (${worst}) ${h.toFixed(2)}cm`, 'warning');
+    return false;
+  }
+  arm.arm = newArm;
+  if (newWrist !== arm.wrist) arm.wrist = newWrist;
+  return true;
+}
+
+function _setWristIfFkSafe(newWrist, label = 'wrist target') {
+  if (!_fk_safe(arm.arm, newWrist)) {
+    const [worst, h] = _fk_worst_segment(arm.arm, newWrist);
+    setStatus(`Blocked ${label}: would hit floor (${worst}) ${h.toFixed(2)}cm`, 'warning');
+    return false;
+  }
+  arm.wrist = newWrist;
+  return true;
+}
+
+function applyLocally(cmd) {
+  const STEP = SERVER_STEP;
+  cmd = cmd.trim().toLowerCase();
+  const isHomeCommand = cmd === 'home' || cmd === 'reset' || cmd === 'center';
+  if (!isHomeCommand) setVisualHomePoseForced(false);
+  switch(cmd) {
+    case 'up':
+      _setArmIfFkSafe(clamp(arm.arm + STEP, jointMin('arm'), jointMax('arm')), arm.wrist, 'Up target');
+      break;
+    case 'down':
+      _setArmIfFkSafe(clamp(arm.arm - STEP, jointMin('arm'), jointMax('arm')), arm.wrist, 'Down target');
+      break;
+    case 'left':        arm.base  = clamp(arm.base  - STEP, jointMin('base'), jointMax('base')); break;
+    case 'right':       arm.base  = clamp(arm.base  + STEP, jointMin('base'), jointMax('base')); break;
+    case 'open':  case 'release': arm.grip = jointMin('grip'); break;
+    case 'close': case 'grip':    arm.grip = jointMax('grip'); break;
+    // FIX: wrist left/right directions corrected to match server-side _do_wrist_left/_do_wrist_right.
+    // Server: wrist_left = cur + STEP, wrist_right = cur - STEP.
+    // Old code had them swapped, causing slider to drift opposite to real motion.
+    case 'wrist left':
+      _setWristIfFkSafe(clamp(arm.wrist + WRIST_BUTTON_STEP, jointMin('wrist'), jointMax('wrist')), 'Wrist left target');
+      break;
+    case 'wrist right':
+      _setWristIfFkSafe(clamp(arm.wrist - WRIST_BUTTON_STEP, jointMin('wrist'), jointMax('wrist')), 'Wrist right target');
+      break;
+    case 'home': case 'reset': case 'center':
+      Object.assign(arm, FACTORY_HOME);
+      setVisualHomePoseForced(true);
+      break;
+    // grab/wave/track don't move sliders locally — wait for real Pi state
+    default:
+      if (cmd.includes('up'))    _setArmIfFkSafe(clamp(arm.arm + STEP, jointMin('arm'), jointMax('arm')), arm.wrist, 'Up target');
+      if (cmd.includes('down'))  _setArmIfFkSafe(clamp(arm.arm - STEP, jointMin('arm'), jointMax('arm')), arm.wrist, 'Down target');
+      if (cmd.includes('left'))  arm.base = clamp(arm.base + STEP, jointMin('base'), jointMax('base'));
+      if (cmd.includes('right')) arm.base = clamp(arm.base - STEP, jointMin('base'), jointMax('base'));
+  }
+  syncUI();
+}
+
+// ── Build sliders ──────────────────────────────────────────────
+const GRIP_DC_MODE = true;  // MG996R with no pot — open/close/stop buttons
+const slidersEl = document.getElementById('sliders');
+JOINTS.forEach(j => {
+  // DC motor gripper: skip slider, build buttons instead
+  if (GRIP_DC_MODE && j.key === 'grip') {
+    const div = document.createElement('div');
+    div.className = 'slider-row';
+    div.innerHTML = `
+      <div class="slider-meta">
+        <span><span class="slider-label" style="color:${j.color}">${j.label}</span><span class="slider-sub">DC motor — open / close / stop</span></span>
+      </div>
+      <div style="display:flex;gap:8px;padding:4px 0">
+        <button class="btn" style="flex:1;background:#1b5e20;color:#fff;font-weight:700;font-size:14px;padding:12px 0;border-radius:8px;cursor:pointer" onclick="gripDcCmd('open')">OPEN</button>
+        <button class="btn" style="flex:1;background:#b71c1c;color:#fff;font-weight:700;font-size:14px;padding:12px 0;border-radius:8px;cursor:pointer" onclick="gripDcCmd('close')">CLOSE</button>
+        <button class="btn" style="flex:1;background:#37474f;color:#fff;font-weight:700;font-size:14px;padding:12px 0;border-radius:8px;cursor:pointer" onclick="gripDcCmd('stop')">STOP</button>
+      </div>
+    `;
+    slidersEl.appendChild(div);
+    return;
+  }
+  const pct = (arm[j.key] - j.min) / (j.max - j.min) * 100;
+  const div = document.createElement('div');
+  div.className = 'slider-row';
+
+  div.innerHTML = `
+    <div class="slider-meta">
+      <span><span class="slider-label" style="color:${j.color}">${j.label}</span><span class="slider-sub">${j.desc}</span></span>
+      <span class="angle-controls">
+        <span class="slider-val" id="val-${j.key}" style="color:${j.color}">${arm[j.key]}°</span>
+        <span class="angle-input-wrap" style="border-color:${j.color}55">
+          <input type="number" class="angle-input" id="angle-${j.key}" min="${j.min}" max="${j.max}" step="1" value="${arm[j.key]}"
+            onkeydown="onAngleKey(event, '${j.key}')"
+            onchange="commitAngleInput('${j.key}')" />
+          <span class="angle-unit">°</span>
+        </span>
+      </span>
+    </div>
+    <div class="slider-track" id="track-${j.key}" style="overflow:visible">
+      <div class="slider-fill" id="fill-${j.key}" style="background:${j.color}; width:${pct}%"></div>
+      <div class="slider-thumb" id="thumb-${j.key}" style="color:${j.color}; left:calc(${pct}% - 8px); border-color:${j.color}"></div>
+      <input type="range" class="slider-input" min="${j.min}" max="${j.max}" value="${arm[j.key]}"
+        oninput="onSlider('${j.key}', this.value, ${j.min}, ${j.max})"
+        onchange="onSliderCommit('${j.key}', this.value)" />
+    </div>
+    <div class="slider-range"><span>${j.min}°</span><span>${j.max}°</span></div>
+  `;
+  slidersEl.appendChild(div);
+});
+
+async function gripDcCmd(cmd) {
+  if (!piIp) { setStatus('Set the Pi IP in Settings first'); return; }
+  try {
+    const r = await fetch(apiUrl('/grip_dc'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cmd }),
+      mode: 'cors', cache: 'no-store'
+    });
+    const d = await r.json();
+    if (r.ok) {
+      setConnected(true);
+      setStatus(`Gripper: ${cmd}`);
+      if (d.position) mergeServerPosition(d.position);
+    } else {
+      setStatus(d.error || 'Grip DC failed');
+    }
+  } catch(e) {
+    setStatus('Pi unreachable');
+  }
+}
+
+function onSlider(key, val, min, max) {
+  setVisualHomePoseForced(false);
+  val = Number(val);
+  
+  // ── DIGITAL TWIN COLLISION CHECK ──
+  // Before allowing any arm or wrist motion, verify it won't hit the floor
+  if (key === 'arm' || key === 'wrist') {
+    const test_arm = key === 'arm' ? val : arm.arm;
+    const test_wrist = key === 'wrist' ? val : arm.wrist;
+    
+    if (!_fk_safe(test_arm, test_wrist)) {
+      const [worst, h] = _fk_worst_segment(test_arm, test_wrist);
+      setStatus(`Blocked slider target: would hit floor (${worst}) ${h.toFixed(2)}cm`, 'warning');
+      // Don't update arm state, let slider snap back visually
+      drawArm();
+      return;
+    }
+  }
+  
+  arm[key] = val;
+  const pct = (val - min) / (max - min) * 100;
+  document.getElementById(`fill-${key}`).style.width  = pct + '%';
+  document.getElementById(`thumb-${key}`).style.left  = `calc(${pct}% - 8px)`;
+  document.getElementById(`val-${key}`).textContent   = Math.round(val) + '°';
+  document.getElementById(`pos-${key}`).textContent   = Math.round(val) + '°';
+  drawArm();
+  if (CONTINUOUS_JOINTS.has(key)) {
+    setStatus('Release slider to rotate');
+    updateTrackButton();
+    return;
+  }
+  scheduleJointSend(key, val);
+}
+
+function onSliderCommit(key, val) {
+  val = Number(val);
+  if (rejectUnsafeJointTarget(key, val, 'slider')) return;
+  if (CONTINUOUS_JOINTS.has(key)) {
+    const prev = Number.isFinite(committedArm[key]) ? committedArm[key] : arm[key];
+    const diff  = val - prev;
+    if (Math.abs(diff) < 1) return;
+    const steps = Math.max(1, Math.round(Math.abs(diff) / WRIST_BUTTON_STEP));
+    const dir   = diff >= 0 ? 'wrist left' : 'wrist right';
+    committedArm[key] = val;
+    holdContinuousJoint(key);
+
+    if (steps > MAX_WRIST_SLIDER_STEPS) {
+      sendContinuousJoint(key, val);
+      return;
+    }
+
+    clearTimeout(wristStopTimer);
+    setStatus(`Wrist: ${Math.round(val)}°`);
+    for (let i = 0; i < steps; i++) {
+      setTimeout(() => sendWristCommand(dir, { updateLocal:false, fallback:false }), i * (WRIST_STOP_DELAY_MS + 20));
+    }
+    wristStopTimer = setTimeout(() => sendWristStopFallback(), steps * (WRIST_STOP_DELAY_MS + 20) + WRIST_STOP_DELAY_MS);
+  } else {
+    clearTimeout(jointTimers[key]);
+    committedArm[key] = val;
+    sendJoint(key, val);
+  }
+}
+
+function onAngleKey(event, key) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    event.currentTarget.blur();
+    commitAngleInput(key);
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    event.currentTarget.value = Math.round(arm[key]);
+    event.currentTarget.blur();
+  }
+}
+
+function commitAngleInput(key) {
+  if (angleCommitLocks[key]) return;
+  angleCommitLocks[key] = true;
+  setTimeout(() => { angleCommitLocks[key] = false; }, 120);
+
+  const input = document.getElementById(`angle-${key}`);
+  if (!input) return;
+  const min = jointMin(key);
+  const max = jointMax(key);
+  let val = Number(input.value);
+  if (!Number.isFinite(val)) val = arm[key];
+  val = Math.round(clamp(val, min, max));
+  input.value = val;
+  onSlider(key, val, min, max);
+  onSliderCommit(key, val);
+}
+
+function scheduleJointSend(key, val) {
+  if (CONTINUOUS_JOINTS.has(key)) return;
+  clearTimeout(jointTimers[key]);
+  jointTimers[key] = setTimeout(() => sendJoint(key, val), JOINT_SEND_DEBOUNCE);
+}
+
+// ── Drag guard — track which sliders the user is actively dragging ──
+JOINTS.forEach(j => {
+  // Set drag flag on pointerdown, clear on pointerup/pointercancel anywhere
+  // Use a timeout so a quick tap still allows the poll to correct drift
+  setTimeout(() => {
+    const track = document.getElementById('track-' + j.key);
+    if (!track) return;
+    track.addEventListener('pointerdown', () => { _dragging[j.key] = true; });
+  }, 200);
+});
+window.addEventListener('pointerup',     () => { JOINTS.forEach(j => { _dragging[j.key] = false; }); });
+window.addEventListener('pointercancel', () => { JOINTS.forEach(j => { _dragging[j.key] = false; }); });
+
+// ── Sync all UI to current arm state ──────────────────────────
+function syncUI() {
+  JOINTS.forEach(j => {
+    if (_dragging[j.key]) return;   // never interrupt an active drag
+    const val = arm[j.key];
+    const pct = (val - j.min) / (j.max - j.min) * 100;
+    const inp = document.querySelector(`#track-${j.key} input`);
+    if (inp) inp.value = val;
+    const fill  = document.getElementById(`fill-${j.key}`);
+    const thumb = document.getElementById(`thumb-${j.key}`);
+    const valEl = document.getElementById(`val-${j.key}`);
+    const angleEl = document.getElementById(`angle-${j.key}`);
+    const posEl = document.getElementById(`pos-${j.key}`);
+    if (fill)  fill.style.width = pct + '%';
+    if (thumb) thumb.style.left = `calc(${pct}% - 8px)`;
+    if (valEl) valEl.textContent = Math.round(val) + '°';
+    if (angleEl && document.activeElement !== angleEl) angleEl.value = Math.round(val);
+    if (posEl) posEl.textContent = Math.round(val) + '°';
+  });
+  drawArm();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DIGITAL TWIN PHYSICS — HTML & Server Simulation Share Constraints
+// ═══════════════════════════════════════════════════════════════
+// PRINCIPLE: If the 3D model rejects a move (gripper would hit floor),
+// the real hardware CANNOT execute that move either. The browser and
+// server use identical forward kinematics, geometry, and safety rules.
+//
+// Real robot dimensions (cm) — MUST match arm_server_v30.py exactly!
+// ────────────────────────────────────────────────────────────────
+// Shoulder to Elbow (upper arm):  16.5 cm  (L1)
+// Elbow to Wrist+Gripper (L2):    38.5 cm  (forearm + reach to gripper tip)
+// Total fully-extended reach:     55.0 cm  (L1 + L2)
+// Floor location:                 7.2 cm BELOW shoulder pivot (72 mm)
+// Safety clearance above floor:   2.0 cm (servo jitter + flex + extra buffer)
+//
+// NO angle-based floor clamping — only FK reject (matches arm_server_v30.py).
+
+const ROBOT_L1_CM   = 13.5;   // upper arm  (shoulder → elbow pivot-to-pivot)
+const ROBOT_L2_CM   = 31.0;   // forearm + wrist + gripper (elbow → tip pivot-to-pivot)
+const ROBOT_REACH_CM = ROBOT_L1_CM + ROBOT_L2_CM;  // 58.0 cm max usable reach
+const FLOOR_BELOW_SHOULDER_CM = 15.0;
+const FLOOR_SAFETY_MARGIN_CM = 0.0;
+const ROBOT_L2_FOREARM_FRAC = 0.73;
+const ROBOT_L2_WRIST_FRAC   = 0.27;
+const GRIPPER_FINGER_EXT_CM = 4.8;
+
+// Three.js scene scale: 1 unit = ~10 cm (so full arm ≈ 4.7 units)
+const CM_TO_U = 0.10;  // centimetres → Three.js units
+
+// Derived heights in scene units
+const U_L1         = ROBOT_L1_CM  * CM_TO_U;  // 1.95
+const U_L2         = ROBOT_L2_CM  * CM_TO_U;  // 3.85
+const U_FLOOR_DROP = FLOOR_BELOW_SHOULDER_CM * CM_TO_U; // 0.75 below shoulder pivot
+const U_FLOOR_SAFE_CLEARANCE = FLOOR_SAFETY_MARGIN_CM * CM_TO_U; // 20 mm buffer
+
+// ── Three.js Arm Model ──────────────────────────────────────────
+function deg(d) { return d * Math.PI / 180; }
+
+// ── DIGITAL TWIN FORWARD KINEMATICS ──
+// Calibrated lookup table: arm_servo_deg → shoulder_angle_deg
+const _FK_TABLE = [
+  [90,  -90.0],
+  [110, -56.2],
+  [130, -39.0],
+  [150, -21.1],
+  [160, -10.4],
+  [180,  11.7],  // tip at 6cm above floor
+];
+
+function _fkShoulderDeg(arm) {
+  const a = Number(arm);
+  const tbl = _FK_TABLE;
+  if (a <= tbl[0][0]) return tbl[0][1];
+  if (a >= tbl[tbl.length-1][0]) return tbl[tbl.length-1][1];
+  for (let i = 0; i < tbl.length - 1; i++) {
+    const [a0, s0] = tbl[i], [a1, s1] = tbl[i+1];
+    if (a0 <= a && a <= a1) {
+      const t = (a - a0) / (a1 - a0);
+      return s0 + t * (s1 - s0);
+    }
+  }
+  return tbl[tbl.length-1][1];
+}
+
+function _fkArmFromShoulder(sh) {
+  const s = Number(sh);
+  const tbl = _FK_TABLE;
+  if (s <= tbl[0][1]) return tbl[0][0];
+  if (s >= tbl[tbl.length-1][1]) return tbl[tbl.length-1][0];
+  for (let i = 0; i < tbl.length - 1; i++) {
+    const [a0, s0] = tbl[i], [a1, s1] = tbl[i+1];
+    if (s0 <= s && s <= s1) {
+      const t = (s - s0) / (s1 - s0);
+      return a0 + t * (a1 - a0);
+    }
+  }
+  return tbl[tbl.length-1][0];
+}
+
+//
+function _fk_segment_heights_cm(arm_deg, wrist_deg) {
+  const sh = deg(_fkShoulderDeg(arm_deg));
+  const wr = deg(wrist_deg - 90.0);
+  const L2f = ROBOT_L2_CM * ROBOT_L2_FOREARM_FRAC;
+  const L2w = ROBOT_L2_CM * ROBOT_L2_WRIST_FRAC;
+  const elbow_drop = ROBOT_L1_CM * Math.sin(sh);
+  const wrist_drop = elbow_drop + L2f * Math.sin(sh + wr);
+  const hand_drop  = wrist_drop + L2w * Math.sin(sh + wr);
+  const tip_drop   = ROBOT_L1_CM * Math.sin(sh) + ROBOT_L2_CM * Math.sin(sh + wr);
+  const chainDown = Math.max(0, Math.sin(sh + wr));
+  const finger_drop = tip_drop + GRIPPER_FINGER_EXT_CM * chainDown;
+  const floor_h = FLOOR_BELOW_SHOULDER_CM;
+  return {
+    elbow:  floor_h - elbow_drop,
+    wrist:  floor_h - wrist_drop,
+    hand:   floor_h - hand_drop,
+    tip:    floor_h - tip_drop,
+    finger: floor_h - finger_drop,
+  };
+}
+
+function _fk_tip_height_cm(arm_deg, wrist_deg) {
+  return _fk_segment_heights_cm(arm_deg, wrist_deg).tip;
+}
+
+function _fk_min_clearance_cm(arm_deg, wrist_deg) {
+  return Math.min(...Object.values(_fk_segment_heights_cm(arm_deg, wrist_deg)));
+}
+
+function _fk_safe(arm_deg, wrist_deg, margin_cm = null) {
+  if (margin_cm === null) margin_cm = FLOOR_SAFETY_MARGIN_CM;
+  return _fk_min_clearance_cm(arm_deg, wrist_deg) >= margin_cm;
+}
+
+function _fk_worst_segment(arm_deg, wrist_deg) {
+  const segs = _fk_segment_heights_cm(arm_deg, wrist_deg);
+  return Object.entries(segs).reduce((a, b) => (a[1] < b[1] ? a : b));
+}
+
+function jointTargetFkSafe(joint, angle) {
+  if (joint === 'arm') return _fk_safe(Number(angle), arm.wrist);
+  if (joint === 'wrist') return _fk_safe(arm.arm, Number(angle));
+  return true;
+}
+
+function rejectUnsafeJointTarget(joint, angle, label = 'move') {
+  if (jointTargetFkSafe(joint, angle)) return false;
+  const testArm = joint === 'arm' ? Number(angle) : arm.arm;
+  const testWrist = joint === 'wrist' ? Number(angle) : arm.wrist;
+  const [worst, h] = _fk_worst_segment(testArm, testWrist);
+  setStatus(`Rejected ${label} target: would hit floor (${worst}) ${h.toFixed(2)}cm`, 'warning');
+  syncUI();
+  return true;
+}
+
+// Shoulder pivot height in scene units (matches initArm3D layout)
+const SCENE_SHOULDER_Y = 1.5; // must match SHOULDER_ABS_Y in initArm3D()
+
+/** Joint positions in world space for 3D view */
+function _fkScenePoints(arm_deg, wrist_deg) {
+  const sh = deg(_fkShoulderDeg(arm_deg));
+  const wr = deg(wrist_deg - 90);
+  const L2f = U_L2 * ROBOT_L2_FOREARM_FRAC;
+  const elbow = {
+    x: 0,
+    y: SCENE_SHOULDER_Y - U_L1 * Math.sin(sh),
+    z: U_L1 * Math.cos(sh),
+  };
+  const wrist = {
+    x: 0,
+    y: elbow.y - L2f * Math.sin(sh + wr),
+    z: elbow.z + L2f * Math.cos(sh + wr),
+  };
+  const tip = {
+    x: 0,
+    y: SCENE_SHOULDER_Y - U_L1 * Math.sin(sh) - U_L2 * Math.sin(sh + wr),
+    z: U_L1 * Math.cos(sh) + U_L2 * Math.cos(sh + wr),
+  };
+  return { elbow, wrist, tip };
+}
+
+const arm3d = {
+  ready:false, failed:false, renderer:null, scene:null, camera:null, view:null,
+  root:null, pathGroup:null, base:null, shoulder:null, elbow:null, wrist:null, leftFinger:null, rightFinger:null,
+  target:{ base:0, shoulder:0, elbow:0, wrist:0, spread:0.18 },
+  yaw:-0.55, pitch:-0.22, dragging:false, lastX:0, lastY:0, lastDepthPath:null,
+  floorY: 0   // world Y of floor plane, set after scene built
+};
+
+function initArm3D() {
+  if (arm3d.ready || arm3d.failed) return arm3d.ready;
+  const canvas = document.getElementById('armCanvas');
+  const stage = document.getElementById('arm3dStage');
+  const fallback = document.getElementById('arm3dFallback');
+  if (!canvas || !stage || !window.THREE) {
+    if (fallback) fallback.style.display = 'flex';
+    arm3d.failed = true;
+    return false;
+  }
+
+  const T = THREE;
+  const renderer = new T.WebGLRenderer({ canvas, antialias:true, alpha:false, preserveDrawingBuffer:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x050b10, 1);
+  if ('outputColorSpace' in renderer) renderer.outputColorSpace = T.SRGBColorSpace;
+
+  const scene = new T.Scene();
+  const camera = new T.PerspectiveCamera(42, 1, 0.1, 100);
+  // Camera framed for real arm (L1=1.65u, L2=3.85u, shoulder at 0.58u, floor at -0.14u)
+  // Total visual height ≈ 4.65u; camera sits back further to frame full reach
+  camera.position.set(4.2, 3.2, 5.8);
+  camera.lookAt(0, 1.8, 0);
+
+  scene.add(new T.HemisphereLight(0xaeefff, 0x071018, 1.15));
+  const key = new T.DirectionalLight(0xffffff, 1.25);
+  key.position.set(3, 5, 4);
+  scene.add(key);
+  const rim = new T.PointLight(0x00bcd4, 1.6, 7);
+  rim.position.set(-2.4, 2.2, 2.2);
+  scene.add(rim);
+
+  const view = new T.Group();
+  scene.add(view);
+  const root = new T.Group();
+  view.add(root);
+
+  const matBase  = new T.MeshStandardMaterial({ color:0x0d1f28, metalness:0.25, roughness:0.45 });
+  const matCyan  = new T.MeshStandardMaterial({ color:0x00bcd4, emissive:0x00333b, metalness:0.35, roughness:0.32 });
+  const matBlue  = new T.MeshStandardMaterial({ color:0x4fc3f7, emissive:0x062336, metalness:0.28, roughness:0.36 });
+  const matPale  = new T.MeshStandardMaterial({ color:0xb3e5fc, emissive:0x071c28, metalness:0.25, roughness:0.38 });
+  const matDark  = new T.MeshStandardMaterial({ color:0x102532, metalness:0.18, roughness:0.55 });
+  const matFloor = new T.MeshStandardMaterial({ color:0x0a2a1a, emissive:0x001206, metalness:0.05, roughness:0.95, transparent:true, opacity:0.80 });
+
+  // ── Real-world layout in scene units (1 unit = 10 cm) ───────────
+  // Arm1 = 19.5 cm = 1.95u, Arm2 = 38.5 cm = 3.85u
+  // Shoulder pivot sits 0.20 (base) + 0.38 (column) = 0.58u above root origin
+  // Floor is 75 mm (0.75u) BELOW the shoulder pivot → absolute Y = 0.58 - 0.75 = -0.17
+  const SHOULDER_ABS_Y = 1.5;
+  const FLOOR_ABS_Y    = SHOULDER_ABS_Y - U_FLOOR_DROP;
+
+  // ── Visible floor plane ─────────────────────────────────────────
+  const floorMesh = new T.Mesh(new T.PlaneGeometry(8.0, 8.0), matFloor);
+  floorMesh.rotation.x = -Math.PI / 2;
+  floorMesh.position.y = FLOOR_ABS_Y;
+  root.add(floorMesh);
+
+  // Floor grid (sits just above floor mesh)
+  const grid = new T.GridHelper(8.0, 20, 0x1a5a3a, 0x0d3020);
+  grid.position.y = FLOOR_ABS_Y + 0.001;
+  root.add(grid);
+
+  // Cyan reach-limit ring on the floor
+  const reachRingGeo = new T.TorusGeometry(ROBOT_REACH_CM * CM_TO_U, 0.016, 6, 52);
+  const reachRingMat = new T.MeshBasicMaterial({ color:0x00bcd455 });
+  const reachRing = new T.Mesh(reachRingGeo, reachRingMat);
+  reachRing.rotation.x = Math.PI / 2;
+  reachRing.position.y = FLOOR_ABS_Y + 0.003;
+  root.add(reachRing);
+
+  const pathGroup = new T.Group();
+  root.add(pathGroup);
+
+  function mesh(geometry, material, x=0, y=0, z=0) {
+    const m = new T.Mesh(geometry, material);
+    m.position.set(x, y, z);
+    m.castShadow = false;
+    m.receiveShadow = false;
+    return m;
+  }
+  function link(length, width, depth, material) {
+    // FK uses local +Z as the link direction:
+    // y = shoulderY - length * sin(angle), z = length * cos(angle).
+    return mesh(new T.BoxGeometry(width, depth, length), material, 0, 0, length / 2);
+  }
+  function joint(radius, material) {
+    return mesh(new T.SphereGeometry(radius, 24, 16), material);
+  }
+
+  // ── Base column (from floor up to shoulder pivot) ────────────────
+  const colH = SHOULDER_ABS_Y - FLOOR_ABS_Y;  // full column height
+  const basePlate = mesh(new T.CylinderGeometry(0.72, 0.86, 0.18, 48), matBase, 0, FLOOR_ABS_Y + 0.09, 0);
+
+  const baseRod = mesh(new T.CylinderGeometry(0.28, 0.36, colH - 0.18, 36), matDark, 0, FLOOR_ABS_Y + 0.18 + (colH - 0.18) / 2, 0);
+  root.add(baseRod);
+
+  const base = new T.Group();
+  base.position.y = 0.50;
+  root.add(base);
+
+  // ── Shoulder joint + Link 1 (19.5 cm = 1.95u) ───────────────────
+  const shoulder = new T.Group();
+  shoulder.position.y = 1.0;
+  base.add(shoulder);
+  shoulder.add(joint(0.20, matCyan));
+  shoulder.add(link(U_L1, 0.24, 0.24, matCyan));
+
+  // ── Elbow joint + Link 2 (38.5 cm = 3.85u) ──────────────────────
+  // Forearm rod: 73% of L2 (≈2.19u), remaining 27% (≈0.81u) is wrist+gripper
+  const U_FOREARM    = U_L2 * ROBOT_L2_FOREARM_FRAC;
+  const U_WRIST_LINK = U_L2 * ROBOT_L2_WRIST_FRAC;
+
+  const elbow = new T.Group();
+  elbow.position.z = U_L1;
+  shoulder.add(elbow);
+  elbow.add(joint(0.17, matBlue));
+  elbow.add(link(U_FOREARM, 0.21, 0.21, matBlue));
+
+  // ── Wrist + gripper mount ────────────────────────────────────────
+  const wrist = new T.Group();
+  wrist.position.z = U_FOREARM;
+  elbow.add(wrist);
+  wrist.add(joint(0.13, matPale));
+  wrist.add(link(U_WRIST_LINK, 0.15, 0.15, matPale));
+
+  const gripper = new T.Group();
+  gripper.position.z = U_WRIST_LINK;
+  wrist.add(gripper);
+  gripper.add(mesh(new T.BoxGeometry(0.38, 0.15, 0.20), matDark, 0, 0, 0.04));
+  const U_FINGER_EXT = GRIPPER_FINGER_EXT_CM * CM_TO_U;
+  const leftFinger  = mesh(new T.BoxGeometry(0.07, 0.09, U_FINGER_EXT), matCyan,  0.20, 0, U_FINGER_EXT / 2);
+  const rightFinger = mesh(new T.BoxGeometry(0.07, 0.09, U_FINGER_EXT), matCyan, -0.20, 0, U_FINGER_EXT / 2);
+  leftFinger.rotation.y  = deg(6);
+  rightFinger.rotation.y = deg(-6);
+  gripper.add(leftFinger, rightFinger);
+
+  // Store floor Y so the animation loop can clamp to it
+  arm3d.floorY = FLOOR_ABS_Y;
+
+  arm3d.renderer = renderer;
+  arm3d.scene = scene;
+  arm3d.camera = camera;
+  arm3d.view = view;
+  arm3d.root = root;
+  arm3d.pathGroup = pathGroup;
+  arm3d.base = base;
+  arm3d.shoulder = shoulder;
+  arm3d.elbow = elbow;
+  arm3d.wrist = wrist;
+  arm3d.leftFinger = leftFinger;
+  arm3d.rightFinger = rightFinger;
+  arm3d.ready = true;
+
+  function resizeArm3D() {
+    const rect = stage.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect.width));
+    const h = Math.max(1, Math.floor(rect.height));
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resizeArm3D).observe(stage);
+  resizeArm3D();
+
+  stage.addEventListener('pointerdown', e => {
+    arm3d.dragging = true;
+    arm3d.lastX = e.clientX;
+    arm3d.lastY = e.clientY;
+    stage.setPointerCapture?.(e.pointerId);
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!arm3d.dragging) return;
+    const dx = e.clientX - arm3d.lastX;
+    const dy = e.clientY - arm3d.lastY;
+    arm3d.lastX = e.clientX;
+    arm3d.lastY = e.clientY;
+    arm3d.yaw += dx * 0.008;
+    arm3d.pitch = clamp(arm3d.pitch + dy * 0.006, -0.85, 0.32);
+  });
+  window.addEventListener('pointerup', () => { arm3d.dragging = false; });
+  window.addEventListener('pointercancel', () => { arm3d.dragging = false; });
+
+  const gizmoCube = document.getElementById('arm3dGizmoCube');
+
+  function animateArm3D() {
+    requestAnimationFrame(animateArm3D);
+    const t = arm3d.target;
+    arm3d.view.rotation.y += (arm3d.yaw   - arm3d.view.rotation.y) * 0.12;
+    arm3d.view.rotation.x += (arm3d.pitch - arm3d.view.rotation.x) * 0.12;
+    arm3d.base.rotation.y += (t.base      - arm3d.base.rotation.y) * 0.22;
+    arm3d.shoulder.rotation.x += (t.shoulder - arm3d.shoulder.rotation.x) * 0.22;
+    arm3d.elbow.rotation.x    += (t.elbow    - arm3d.elbow.rotation.x)    * 0.22;
+    arm3d.wrist.rotation.x    += (t.wrist    - arm3d.wrist.rotation.x)    * 0.22;
+    arm3d.leftFinger.position.x  += (t.spread  - arm3d.leftFinger.position.x)  * 0.25;
+    arm3d.rightFinger.position.x += (-t.spread - arm3d.rightFinger.position.x) * 0.25;
+    if (gizmoCube) {
+      const yawDeg = -arm3d.view.rotation.y * 180 / Math.PI;
+      const pitchDeg = arm3d.view.rotation.x * 180 / Math.PI;
+      gizmoCube.style.transform = `rotateX(${pitchDeg}deg) rotateY(${yawDeg}deg)`;
+    }
+    renderer.render(scene, camera);
+  }
+  animateArm3D();
+  return true;
+}
+
+function drawArm() {
+  const pose = forceVisualHomePose ? VISUAL_HOME_POSE : arm;
+  const readout = document.getElementById('arm3dReadout');
+  if (readout) {
+    // Show reach info alongside joint angles
+    const armDeg = Math.round(arm.arm);
+    // Approximate tip forward reach: L1*cos(armAngle) + L2*cos(armAngle+elbowAngle)
+    // For display: use simple cosine of arm angle mapped to real cm
+    const shCm = deg(_fkShoulderDeg(arm.arm));
+    const wrCm = deg(arm.wrist - 90);
+    const reachApprox = Math.round(
+      Math.max(0, ROBOT_L1_CM * Math.cos(shCm) + ROBOT_L2_CM * Math.cos(shCm + wrCm))
+    );
+    const segs = _fk_segment_heights_cm(arm.arm, arm.wrist);
+    const clr = Math.min(...Object.values(segs));
+    const [worst] = _fk_worst_segment(arm.arm, arm.wrist);
+    const fkOk = clr >= FLOOR_SAFETY_MARGIN_CM;
+    readout.textContent = `B:${Math.round(arm.base)}° A:${armDeg}° W:${Math.round(arm.wrist)}° G:${Math.round(arm.grip)}° | ~${reachApprox}cm | ${worst} ${clr.toFixed(2)}cm`;
+  }
+  if (!initArm3D()) return;
+  if (readout && forceVisualHomePose) {
+    readout.textContent = 'B:90deg A:90deg W:90deg G:30deg | VISUAL HOME';
+  }
+
+  // 3D hierarchy: shoulder=L1, elbow=L2 bend, wrist=short mount only.
+  // The wrist *servo* bends the elbow joint (FK uses sh+wr); do NOT drive arm3d.wrist.rotation.
+  arm3d.target.base     = deg(90 - pose.base);
+  arm3d.target.shoulder = deg(_fkShoulderDeg(pose.arm));
+  arm3d.target.elbow    = deg(pose.wrist - 90);
+  arm3d.target.wrist    = 0;
+
+  const fkOk = _fk_safe(pose.arm, pose.wrist);
+  if (readout) readout.style.color = fkOk ? '#1a8ea0' : '#ff5252';
+
+  // Gripper spread
+  arm3d.target.spread = 0.10 + (pose.grip - jointMin('grip')) / (jointMax('grip') - jointMin('grip')) * 0.20;
+  if (forceVisualHomePose) {
+    arm3d.base.rotation.y = arm3d.target.base;
+    arm3d.shoulder.rotation.x = arm3d.target.shoulder;
+    arm3d.elbow.rotation.x = arm3d.target.elbow;
+    arm3d.wrist.rotation.x = arm3d.target.wrist;
+    arm3d.leftFinger.position.x = arm3d.target.spread;
+    arm3d.rightFinger.position.x = -arm3d.target.spread;
+  }
+}
+
+function disposePathObject(obj) {
+  if (!obj) return;
+  if (obj.geometry) obj.geometry.dispose?.();
+  const mat = obj.material;
+  if (Array.isArray(mat)) mat.forEach(m => m && m.dispose?.());
+  else mat && mat.dispose?.();
+}
+
+function clearArm3DPath() {
+  if (!arm3d.pathGroup) return;
+  while (arm3d.pathGroup.children.length) {
+    const child = arm3d.pathGroup.children[0];
+    arm3d.pathGroup.remove(child);
+    child.traverse?.(disposePathObject);
+    disposePathObject(child);
+  }
+}
+
+function depthToScenePoint(target, yOverride = null) {
+  const scale = CM_TO_U;
+  const floorY = Number.isFinite(arm3d.floorY) ? arm3d.floorY : -0.14;
+  const xLimit = ROBOT_REACH_CM * scale * 0.72;
+  const zLimit = ROBOT_REACH_CM * scale;
+  const x = clamp(Number(target.x_cm || 0) * scale, -xLimit, xLimit);
+  const z = clamp(-Number(target.z_cm || 0) * scale, -zLimit, -0.28);
+  const yFromDepth = clamp(
+    floorY + U_FLOOR_SAFE_CLEARANCE - Number(target.y_cm || 0) * scale,
+    floorY + U_FLOOR_SAFE_CLEARANCE,
+    2.7
+  );
+  return new THREE.Vector3(x, yOverride === null ? yFromDepth : yOverride, z);
+}
+
+function makePathSphere(T, radius, color, point) {
+  const sphere = new T.Mesh(
+    new T.SphereGeometry(radius, 24, 14),
+    new T.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:0.35, metalness:0.15, roughness:0.35 })
+  );
+  sphere.position.copy(point);
+  return sphere;
+}
+
+function makePathLine(T, points, color) {
+  return new T.Line(
+    new T.BufferGeometry().setFromPoints(points),
+    new T.LineBasicMaterial({ color, linewidth:2 })
+  );
+}
+
+function updateArm3DPath(result) {
+  arm3d.lastDepthPath = result || null;
+  const label = document.getElementById('arm3dPathLabel');
+  const p = result && result.path ? result.path : null;
+  const target = p && p.target_cm ? p.target_cm : null;
+
+  if (!p || !target || target.z_cm === undefined || !window.THREE || !initArm3D()) {
+    clearArm3DPath();
+    if (label) label.textContent = 'Grab path: --';
+    return;
+  }
+
+  const T = THREE;
+  clearArm3DPath();
+
+  // ── Waypoints ─────────────────────────────────────────────────
+  // Contact: object surface (gripper closes here)
+  const floorContactY = (Number.isFinite(arm3d.floorY) ? arm3d.floorY : -0.14) + U_FLOOR_SAFE_CLEARANCE;
+  const contact = depthToScenePoint(target, floorContactY);
+
+  // Approach: safe height above contact (arm arrives here before descending)
+  const shownDescentDeg = Number(p.execution_descent_deg ?? p.raw_descent_deg ?? p.descent_deg ?? 0);
+  const descent = clamp(shownDescentDeg / 50 * 2.6, 0.45, 2.6);
+  const approach = contact.clone();
+  approach.y += descent;
+
+  // Start at current gripper tip (matches real arm pose — not a vertical line at the base)
+  const tipNow = _fkScenePoints(arm.arm, arm.wrist).tip;
+  const start = new T.Vector3(tipNow.x, tipNow.y, tipNow.z);
+
+  // Lift: where the arm goes AFTER closing the gripper (pulled up)
+  const liftH = clamp(Number(p.lift_cm || 8) * 0.075, 0.35, 1.4);
+  const lift = contact.clone();
+  lift.y += liftH;
+
+  // ── Phase 1 — Approach (cyan): start → safe hover ─────────────
+  arm3d.pathGroup.add(makePathLine(T, [start, approach], 0x00bcd4));
+
+  // ── Phase 2 — Descent (amber): hover → contact ────────────────
+  arm3d.pathGroup.add(makePathLine(T, [approach, contact], 0xffd54f));
+
+  // ── Phase 3 — Lift (green): contact → raised position ─────────
+  arm3d.pathGroup.add(makePathLine(T, [contact, lift], 0x4ade80));
+
+  // ── Waypoint spheres ──────────────────────────────────────────
+  arm3d.pathGroup.add(makePathSphere(T, 0.055, 0x00e5ff, start));      // ① home
+  arm3d.pathGroup.add(makePathSphere(T, 0.07,  0x00bcd4, approach));   // ② hover
+  arm3d.pathGroup.add(makePathSphere(T, 0.085, 0xffd54f, contact));    // ③ contact / grip
+  arm3d.pathGroup.add(makePathSphere(T, 0.07,  0x4ade80, lift));       // ④ lifted
+
+  // ── Contact ring (amber) — target footprint ───────────────────
+  const ring = new T.Mesh(
+    new T.TorusGeometry(0.18, 0.012, 8, 36),
+    new T.MeshBasicMaterial({ color:0xffd54f })
+  );
+  ring.position.copy(contact);
+  ring.rotation.x = Math.PI / 2;
+  arm3d.pathGroup.add(ring);
+
+  // ── Gripper-close indicator (green ring) at contact ───────────
+  // Signals where the gripper closes before pulling the object up.
+  const gripRing = new T.Mesh(
+    new T.TorusGeometry(0.10, 0.016, 8, 28),
+    new T.MeshBasicMaterial({ color:0x4ade80 })
+  );
+  gripRing.position.copy(contact);
+  gripRing.position.y += 0.06;
+  gripRing.rotation.x = Math.PI / 2;
+  arm3d.pathGroup.add(gripRing);
+
+  // ── Lift arrow stem (thin green cylinder) ─────────────────────
+  const liftMid = contact.clone();
+  liftMid.y += liftH * 0.5;
+  const liftStemH = liftH * 0.72;
+  const liftStemGeo = new T.CylinderGeometry(0.012, 0.012, liftStemH, 8);
+  const liftStemMat = new T.MeshBasicMaterial({ color:0x4ade80 });
+  const liftStem = new T.Mesh(liftStemGeo, liftStemMat);
+  liftStem.position.copy(liftMid);
+  arm3d.pathGroup.add(liftStem);
+
+  // ── Path label ────────────────────────────────────────────────
+  if (label) {
+    const reach = p.is_reachable === false ? '✗ OUT' : '✓ IN';
+    const extraDrop = Number(p.extra_drop_deg || 0);
+    const dropLabel = extraDrop > 0.05
+      ? `${shownDescentDeg.toFixed(1)}° (${Number(p.descent_deg || 0).toFixed(1)}+${extraDrop.toFixed(1)})`
+      : `${shownDescentDeg.toFixed(1)}°`;
+    label.textContent =
+      `Planned grab path ${reach} (depth map, not tracking)\n` +
+      `target X ${Number(target.x_cm || 0).toFixed(1)} Y ${Number(target.y_cm || 0).toFixed(1)} Z ${Number(target.z_cm || 0).toFixed(1)} cm\n` +
+      `${p.grab_height_cm !== undefined && p.grab_height_cm !== null ? `grab ${Number(p.grab_height_cm || 0).toFixed(1)}cm up  ` : ''}` +
+      `① approach  ② descend ${dropLabel}  ③ grip  ④ lift ${Number(p.lift_cm || 8).toFixed(1)} cm`;
+  }
+}
+
+drawArm();
+
+// ── Camera ─────────────────────────────────────────────────────
+function updateCam() {
+  const img     = document.getElementById('camImg');
+  const ph      = document.getElementById('camPlaceholder');
+  const cross   = document.getElementById('camCross');
+  const pickBtn = document.getElementById('pickBtn');
+  const addr    = document.getElementById('camAddr');
+
+  if (piIp) {
+    // FIX: point to /stream not / (/ just returns a redirect HTML page)
+    img.src = streamUrl('/stream');
+    img.style.display    = 'block';
+    ph.style.display     = 'none';
+    cross.style.display  = 'block';
+    syncPickupCrosshair();
+    pickBtn.style.display = 'block';
+    addr.textContent     = `${piIp}:8080`;
+  } else {
+    img.style.display    = 'none';
+    ph.style.display     = 'flex';
+    cross.style.display  = 'none';
+    pickBtn.style.display = 'none';
+    addr.textContent     = '';
+  }
+}
+
+function camError() {
+  const img = document.getElementById('camImg');
+  const ph  = document.getElementById('camPlaceholder');
+  img.style.display = 'none';
+  ph.innerHTML = `
+    <div class="icon">📷</div>
+    <div>Cannot reach camera stream</div>
+    <button class="btn btn-cyan" style="margin-top:6px" onclick="retryCam()">Retry</button>
+  `;
+  ph.style.display = 'flex';
+}
+
+function retryCam() {
+  const img = document.getElementById('camImg');
+    img.src = streamUrl(`/stream?t=${Date.now()}`);
+  img.style.display = 'block';
+  document.getElementById('camPlaceholder').style.display = 'none';
+}
+
+function camLoaded() { /* stream connected */ }
+
+// ── Detection polling — fetch object labels from Pi ────────────
+let _lastDets = [];
+let _lastDepthPath = null;
+let pendingGrabFeedback = null;
+let _trackingActive = false;
+let _trackingObject = null;
+
+async function pollDetections() {
+  if (!piIp || !connected) return;
+  try {
+    const r = await fetch(apiUrl('/detections'), { mode:'cors', cache:'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    _lastDets = d.items || [];
+    if (d.depth_model) updateDepthState(d.depth_model);
+    if (d.depth_result) updateDepthResult(d.depth_result);
+    updateDetectionUI(_lastDets);
+    syncPickupCrosshair();
+    _updateGrabErrDisplay(_lastDets);  // calibration panel live error
+  } catch { /* silent — Pi may be busy */ }
+}
+
+function updateDetectionUI(dets) {
+  const pickBtn = document.getElementById('pickBtn');
+  if (!dets.length) {
+    pickBtn.textContent = '⚡ Pick Up';
+    pickBtn.title = 'No objects detected';
+    _lastDepthPath = null;
+    updateObjectHeightReadout(null, null);
+    updateTrackButton();
+    return;
+  }
+  const best = dets[0];
+  updateObjectHeightReadout(best, null);
+  const confidence = Number(best.confidence || 0);
+  pickBtn.textContent = `⚡ Grab ${best.label} (${confidence.toFixed(0)}%)`;
+  const depthSource = best.depth_source ? `, depth: ${best.depth_source}` : '';
+  pickBtn.title = `Click to grab ${best.label}${depthSource}`;
+  updateTrackButton();
+
+  // Only update status if no command is in flight (don't overwrite "Moving up…" etc.)
+  const labels = [...new Set(dets.map(d => d.label))].join(', ');
+  const statusEl = document.getElementById('statusTxt');
+  const cur = statusEl ? statusEl.textContent : '';
+  if (!cur || cur.startsWith('Sees:') || cur === 'Ready') {
+    setStatus('Sees: ' + labels);
+  }
+}
+
+// ── Pick up best detected object via /pickup endpoint ──────────
+function updateObjectHeightReadout(det = null, path = null) {
+  const el = document.getElementById('objectHeight');
+  if (!el) return;
+  if (!path) path = _lastDepthPath;
+  const hCm = Number(
+    det?.corrected_object_height_cm ??
+    det?.object_height_cm ??
+    path?.corrected_object_height_cm ??
+    path?.object_height_cm
+  );
+  const hPx = Number(
+    det?.object_height_px ??
+    det?.pixel_height ??
+    path?.object_height_px ??
+    path?.pixel_height
+  );
+  if (Number.isFinite(hCm) && hCm > 0) {
+    el.textContent = `${hCm.toFixed(1)} cm`;
+  } else if (Number.isFinite(hPx) && hPx > 0) {
+    el.textContent = `${hPx.toFixed(0)} px`;
+  } else {
+    el.textContent = '--';
+  }
+}
+
+function updateTrackButton() {
+  const btn = document.getElementById('trackBtn');
+  const txt = document.getElementById('trackBtnText');
+  if (!btn || !txt) return;
+  if (_trackingActive) {
+    txt.textContent = 'Stop';
+    btn.title = _trackingObject ? `Stop tracking ${_trackingObject}` : 'Stop tracking';
+    btn.classList.remove('btn-cyan');
+    btn.classList.add('btn-yellow');
+    return;
+  }
+  const best = _lastDets.length ? _lastDets[0] : null;
+  txt.textContent = 'Track';
+  btn.title = best ? `Track ${best.label}` : 'Track nearest detected object';
+  btn.classList.remove('btn-yellow');
+  btn.classList.add('btn-cyan');
+}
+
+async function doTrack() {
+  if (_trackingActive) {
+    await sendCommand('stop tracking');
+    return;
+  }
+  const best = _lastDets.length ? _lastDets[0] : null;
+  const label = best && best.label ? String(best.label).trim().toLowerCase() : '';
+  await sendCommand(label ? `track ${label}` : 'track');
+}
+
+async function doPickup(objName) {
+  if (!piIp) { setStatus('Set Pi IP first'); return; }
+  const body = objName ? { object: objName } : {};
+  hideGrabFeedback();
+  setStatus(`Grabbing ${objName || 'best object'}…`);
+  try {
+    const r = await fetch(apiUrl('/pickup'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      mode: 'cors', cache: 'no-store'
+    });
+    if (r.ok) {
+      const d = await r.json();
+      setConnected(true);
+      setStatus(d.status || 'Pickup sent');
+      mergeServerPosition(d.position);
+      // Show the position snapshot taken the moment pickup was triggered
+      if (d.pickup_start_pos) {
+        const sp = d.pickup_start_pos;
+        const panel = document.getElementById('snapPanel');
+        if (panel) {
+          document.getElementById('snap-base').textContent  = sp.base  + '°';
+          document.getElementById('snap-arm').textContent   = sp.arm   + '°';
+          document.getElementById('snap-wrist').textContent = sp.wrist + '°';
+          document.getElementById('snap-grip').textContent  = sp.grip  + '°';
+          const ts = document.getElementById('snapTime');
+          if (ts) ts.textContent = 'captured ' + new Date().toLocaleTimeString();
+          panel.style.display = 'block';
+        }
+      }
+      // Update depth map display if server returned one at button press
+      if (d.depth_result) updateDepthResult(d.depth_result);
+      showGrabFeedback(objName || (_lastDets.length ? _lastDets[0].label : 'object'));
+    } else {
+      setConnected(false);
+      setStatus(`Pickup error: ${r.status}`);
+    }
+  } catch (err) {
+    setConnected(false);
+    setStatus('Pi unreachable for pickup');
+  }
+}
+
+function showGrabFeedback(label) {
+  pendingGrabFeedback = { label, opened:false, homed:false };
+  const panel = document.getElementById('grabFeedback');
+  const text = document.getElementById('grabFeedbackText');
+  const actions = document.getElementById('grabFeedbackActions');
+  if (!panel || !text || !actions) return;
+  text.textContent = `How did the ${label || 'object'} grab go?`;
+  actions.className = 'feedback-actions five';
+  actions.innerHTML = `
+    <button class="btn btn-red" onclick="grabWasTooLow()">Too low</button>
+    <button class="btn btn-yellow" onclick="grabWasUnsuccessful()">Missed high</button>
+    <button class="btn btn-yellow" onclick="grabWasTooClose()">Too close</button>
+    <button class="btn btn-yellow" onclick="grabWasTooFar()">Too far</button>
+    <button class="btn btn-cyan" onclick="grabWasSuccessful()">Grab was successful</button>
+  `;
+  panel.classList.add('open');
+}
+
+function hideGrabFeedback() {
+  const panel = document.getElementById('grabFeedback');
+  if (panel) panel.classList.remove('open');
+}
+
+async function postPickupFeedback(result, extra = {}) {
+  if (!piIp) return;
+  try {
+    const r = await fetch(apiUrl('/pickup_feedback'), {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({ result, ...extra }),
+      mode:'cors',
+      cache:'no-store'
+    });
+    if (r.ok) {
+      const d = await r.json();
+      setConnected(true);
+      if (d.status) setStatus(d.status);
+    }
+  } catch {
+    setStatus('Feedback not saved: Pi unreachable');
+  }
+}
+
+async function grabWasUnsuccessful() {
+  await postPickupFeedback('failed');
+  const text = document.getElementById('grabFeedbackText');
+  const actions = document.getElementById('grabFeedbackActions');
+  if (text) text.textContent = 'Got it. Next grab will use a little more drop. Homing now...';
+  if (actions) {
+    actions.className = 'feedback-actions single';
+    actions.innerHTML = `<button class="btn btn-cyan" disabled>Homing...</button>`;
+  }
+  await sendCommand('home');
+  hideGrabFeedback();
+}
+
+async function grabWasTooLow() {
+  await postPickupFeedback('too_low');
+  const text = document.getElementById('grabFeedbackText');
+  const actions = document.getElementById('grabFeedbackActions');
+  if (text) text.textContent = 'Got it. Next grab will stay higher. Homing now...';
+  if (actions) {
+    actions.className = 'feedback-actions single';
+    actions.innerHTML = `<button class="btn btn-cyan" disabled>Homing...</button>`;
+  }
+  await sendCommand('home');
+  hideGrabFeedback();
+}
+
+async function grabWasTooClose() {
+  await postPickupFeedback('too_close');
+  const text = document.getElementById('grabFeedbackText');
+  const actions = document.getElementById('grabFeedbackActions');
+  if (text) text.textContent = 'Got it. Next depth grab will reach farther. Homing now...';
+  if (actions) {
+    actions.className = 'feedback-actions single';
+    actions.innerHTML = `<button class="btn btn-cyan" disabled>Homing...</button>`;
+  }
+  await sendCommand('home');
+  hideGrabFeedback();
+}
+
+async function grabWasTooFar() {
+  await postPickupFeedback('too_far');
+  const text = document.getElementById('grabFeedbackText');
+  const actions = document.getElementById('grabFeedbackActions');
+  if (text) text.textContent = 'Got it. Next depth grab will reach closer. Homing now...';
+  if (actions) {
+    actions.className = 'feedback-actions single';
+    actions.innerHTML = `<button class="btn btn-cyan" disabled>Homing...</button>`;
+  }
+  await sendCommand('home');
+  hideGrabFeedback();
+}
+
+function grabWasSuccessful() {
+  const text = document.getElementById('grabFeedbackText');
+  const actions = document.getElementById('grabFeedbackActions');
+  if (text) text.textContent = 'Should it open the gripper?';
+  if (actions) {
+    actions.className = 'feedback-actions';
+    actions.innerHTML = `
+      <button class="btn btn-cyan" onclick="openAfterSuccessfulGrab()">Yes, open</button>
+      <button class="btn btn-yellow" onclick="homeWithoutOpeningAfterSuccessfulGrab()">No, home</button>
+    `;
+  }
+}
+
+async function openAfterSuccessfulGrab() {
+  pendingGrabFeedback = pendingGrabFeedback || {};
+  pendingGrabFeedback.opened = true;
+  await sendCommand('open');
+  const text = document.getElementById('grabFeedbackText');
+  const actions = document.getElementById('grabFeedbackActions');
+  if (text) text.textContent = 'Home now?';
+  if (actions) {
+    actions.className = 'feedback-actions single';
+    actions.innerHTML = `<button class="btn btn-cyan" onclick="homeAfterSuccessfulGrab()">OK</button>`;
+  }
+}
+
+async function homeAfterSuccessfulGrab() {
+  pendingGrabFeedback = pendingGrabFeedback || {};
+  pendingGrabFeedback.homed = true;
+  await sendCommand('home');
+  await finishSuccessfulGrab(true, true);
+}
+
+async function homeWithoutOpeningAfterSuccessfulGrab() {
+  pendingGrabFeedback = pendingGrabFeedback || {};
+  pendingGrabFeedback.opened = false;
+  pendingGrabFeedback.homed = true;
+  const text = document.getElementById('grabFeedbackText');
+  const actions = document.getElementById('grabFeedbackActions');
+  if (text) text.textContent = 'Homing now...';
+  if (actions) {
+    actions.className = 'feedback-actions single';
+    actions.innerHTML = `<button class="btn btn-cyan" disabled>Homing...</button>`;
+  }
+  await sendCommand('home');
+  await finishSuccessfulGrab(false, true);
+}
+
+async function finishSuccessfulGrab(opened, homed) {
+  await postPickupFeedback('success', { opened, homed });
+  hideGrabFeedback();
+}
+
+// ── Calibration panel functions ────────────────────────────────
+const _calState = { offsets: {}, visible: false };
+const _gripTuneState = { level: 2, name: 'normal' };
+
+function updateGripTuneUI(tune) {
+  if (!tune) return;
+  _gripTuneState.level = Number(tune.level ?? _gripTuneState.level);
+  _gripTuneState.name = String(tune.name || _gripTuneState.name || 'normal');
+  const nameEl = document.getElementById('gripTuneName');
+  if (nameEl) nameEl.textContent = _gripTuneState.name;
+}
+
+async function fetchGripTune() {
+  if (!piIp) return;
+  try {
+    const r = await fetch(apiUrl('/grip_tune'), { mode:'cors', cache:'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    updateGripTuneUI(d.grip_tune);
+  } catch (e) { console.warn('[GRIP] tune fetch failed:', e); }
+}
+
+async function adjustGripTune(delta) {
+  if (!piIp) {
+    setConnected(false);
+    setStatus('Set the Pi IP in Settings first');
+    return;
+  }
+  try {
+    const r = await fetch(apiUrl('/grip_tune'), {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({ delta:Number(delta) }),
+      mode:'cors',
+      cache:'no-store',
+    });
+    const d = await r.json();
+    if (r.ok) {
+      updateGripTuneUI(d.grip_tune);
+      setStatus(d.status || `Gripper strength: ${_gripTuneState.name}`);
+    } else {
+      setStatus(d.error || 'Could not tune gripper');
+    }
+  } catch {
+    setStatus('Pi unreachable for gripper tuning');
+  }
+}
+
+function syncPickupCrosshair() {
+  const cross = document.getElementById('camCross');
+  if (!cross) return;
+  const FRAME_W = 640, FRAME_H = 480;
+  const dbg = _lastDets && _lastDets[0] && _lastDets[0].pickup_debug;
+  const ch = dbg && dbg.crosshair_px ? dbg.crosshair_px : null;
+  const px = ch ? Number(ch.x) : FRAME_W / 2 + Number(_calState.offsets.camera_center_px || 0);
+  const py = ch ? Number(ch.y) : FRAME_H / 2 + Number(_calState.offsets.camera_center_y_px || 0);
+  const pctX = clamp((px / FRAME_W) * 100, 0, 100);
+  const pctY = clamp((py / FRAME_H) * 100, 0, 100);
+  cross.style.left = `${pctX}%`;
+  cross.style.top = `${pctY}%`;
+}
+
+function syncHomeAngles() {
+  const el = document.getElementById('homeAngles');
+  if (!el) return;
+  const o = _calState.offsets || {};
+  const hb = Number(o.home_base ?? DEFAULTS.base);
+  const ha = Number(o.home_arm ?? DEFAULTS.arm);
+  const hw = Number(o.home_wrist ?? DEFAULTS.wrist);
+  const hg = Number(o.home_grip ?? DEFAULTS.grip);
+  Object.assign(DEFAULTS, { base:hb, arm:ha, wrist:hw, grip:hg });
+  el.textContent = `home: B ${hb.toFixed(0)} deg  A ${ha.toFixed(0)} deg  W ${hw.toFixed(0)} deg  G ${hg.toFixed(0)} deg`;
+}
+
+function toggleCalPanel() {
+  const p = document.getElementById('calPanel');
+  if (!p) return;
+  _calState.visible = !_calState.visible;
+  p.style.display = _calState.visible ? 'block' : 'none';
+  if (_calState.visible) fetchCalibration();
+}
+
+async function fetchCalibration() {
+  if (!piIp) return;
+  try {
+    const r = await fetch(apiUrl("/calibrate"));
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data.calibration && data.calibration.offsets) {
+      const o = data.calibration.offsets;
+      _calState.offsets = { ...o };
+      const setVal = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) el.value = typeof v === 'number' ? v.toFixed(2) : v;
+      };
+      setVal('cal-gripper-x', o.gripper_x_cm ?? 0);
+      setVal('cal-gripper-y', o.gripper_y_cm ?? 0);
+      setVal('cal-cam-px',    o.camera_center_px ?? 0);
+      setVal('cal-cam-y-px',  o.camera_center_y_px ?? 0);
+      setVal('cal-cr-scale',  o.close_range_scale ?? 1);
+      syncPickupCrosshair();
+      syncHomeAngles();
+      const st = document.getElementById('calStatus');
+      if (st) st.textContent = `Loaded: gx=${(o.gripper_x_cm||0).toFixed(1)}cm  gy=${(o.gripper_y_cm||0).toFixed(1)}cm  px=${(o.camera_center_px||0).toFixed(0)}  py=${(o.camera_center_y_px||0).toFixed(0)}  crScale=${(o.close_range_scale||1).toFixed(3)}`;
+    }
+  } catch (e) { console.warn('[CAL] fetch failed:', e); }
+}
+
+async function _postCalibrate(payload) {
+  if (!piIp) { alert('Pi not configured — open Settings first'); return null; }
+  try {
+    const r = await fetch(apiUrl("/calibrate"), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (data.calibration && data.calibration.offsets) {
+      _calState.offsets = { ...data.calibration.offsets };
+      syncPickupCrosshair();
+      syncHomeAngles();
+    }
+    const st = document.getElementById('calStatus');
+    if (st) {
+      const changed = data.changed ? JSON.stringify(data.changed) : '';
+      st.textContent = `Updated: ${changed}`;
+    }
+    return data;
+  } catch (e) {
+    console.error('[CAL] post failed:', e);
+    return null;
+  }
+}
+
+async function saveCurrentHome() {
+  const home = {
+    base: Number(arm.base),
+    arm: Number(arm.arm),
+    wrist: Number(arm.wrist),
+    grip: Number(arm.grip),
+  };
+  const data = await _postCalibrate({ home });
+  if (data) setStatus('Home angles saved');
+}
+
+async function resetHomeAngles() {
+  const home = { base:90, arm:90, wrist:90, grip:30 };
+  Object.assign(DEFAULTS, home);
+  const data = await _postCalibrate({ home });
+  if (data) setStatus('Home angles reset');
+}
+
+async function applyCalOffset(key, inputId) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  const val = parseFloat(el.value);
+  if (isNaN(val)) { alert('Enter a valid number'); return; }
+  await _postCalibrate({ [key]: val });
+  await fetchCalibration();
+}
+
+async function autoDepthScale() {
+  const realEl = document.getElementById('cal-depth-real');
+  const predEl = document.getElementById('cal-depth-pred');
+  if (!realEl || !predEl) return;
+  const real = parseFloat(realEl.value);
+  const pred = parseFloat(predEl.value);
+  if (isNaN(real) || isNaN(pred) || pred <= 0) { alert('Enter valid distances'); return; }
+  const data = await _postCalibrate({ depth_real_cm: real, depth_predicted_cm: pred });
+  if (data) {
+    const st = document.getElementById('calStatus');
+    if (st) st.textContent = `Auto-scale: ${real}/${pred} = ${(real/pred).toFixed(3)}× applied`;
+    await fetchCalibration();
+  }
+}
+
+async function autoGrabCorrect() {
+  const errEl   = document.getElementById('cal-err-x');
+  const errYEl  = document.getElementById('cal-err-y');
+  const depthEl = document.getElementById('cal-err-depth');
+  if (!errEl || !depthEl) return;
+  const err   = parseFloat(errEl.value);
+  const errY  = errYEl ? parseFloat(errYEl.value) : 0;
+  const depth = parseFloat(depthEl.value);
+  if (isNaN(err) || isNaN(errY) || isNaN(depth)) { alert('Enter valid values'); return; }
+  const data = await _postCalibrate({ grab_error_x_cm: err, grab_error_y_cm: errY, grab_depth_cm: depth });
+  if (data) {
+    await fetchCalibration();
+    const st = document.getElementById('calStatus');
+    if (st) st.textContent = `Auto-corrected: errX=${err}cm errY=${errY}cm at ${depth}cm depth`;
+  }
+}
+
+async function resetCalibration() {
+  if (!confirm('Reset all calibration offsets to zero?')) return;
+  await _postCalibrate({ reset: true });
+  await fetchCalibration();
+}
+
+function _updateGrabErrDisplay(dets) {
+  /* Called from the status-poll loop when new detections arrive.
+     Shows the live error between the detected centroid and the aim crosshair. */
+  const el = document.getElementById('grabErrDisplay');
+  if (!el || !_calState.visible) return;
+  if (!dets || !dets.length) {
+    el.textContent = 'No detection';
+    el.className = 'grab-err-display';
+    return;
+  }
+  const det = dets[0];
+  const dbg = det.pickup_debug || {};
+  const center = dbg.detected_object_center_px || {};
+  const crosshair = dbg.crosshair_px || {};
+  const aim = dbg.movement_aim_px || {};
+  const cx = Number(center.x ?? det.object_center_x ?? det.target_x ?? det.cx ?? 0);
+  const cy = Number(center.y ?? det.object_center_y ?? det.target_y ?? det.cy ?? 0);
+  // Movement aim is at FRAME centre + camera calibration offset. During pickup
+  // the visible green crosshair may instead show the locked target center.
+  const FRAME_W = 640, FRAME_H = 480;
+  const lockX = Number(crosshair.x ?? cx);
+  const lockY = Number(crosshair.y ?? cy);
+  const aimX = Number(aim.x ?? (FRAME_W / 2 + (_calState.offsets.camera_center_px ?? 0)));
+  const aimY = Number(aim.y ?? (FRAME_H / 2 + (_calState.offsets.camera_center_y_px ?? 0)));
+  const errX = cx - aimX;
+  const errY = cy - aimY;
+  const mag  = Math.hypot(errX, errY).toFixed(1);
+  const zeroed = parseFloat(mag) < 10;
+  const wrist = Number(det.target_wrist_deg ?? dbg.target_wrist_deg);
+  const wristTxt = Number.isFinite(wrist) ? `  wrist=${wrist.toFixed(0)}deg` : '';
+  const frozenTxt = dbg.frozen_center ? '  locked' : '';
+  el.textContent = `center X=${cx.toFixed(0)} Y=${cy.toFixed(0)}  cross X=${lockX.toFixed(0)} Y=${lockY.toFixed(0)}  aim X=${aimX.toFixed(0)} Y=${aimY.toFixed(0)}  move X=${errX.toFixed(0)} Y=${errY.toFixed(0)} |${mag}|px${wristTxt}${frozenTxt}  ${zeroed ? 'aligned' : ''}`;
+  el.className = 'grab-err-display' + (zeroed ? ' zeroed' : '');
+}
+
+function objectNameFromCommand(key) {
+  const phrases = ['pick up', 'grab', 'pick'];
+  for (const phrase of phrases) {
+    const idx = key.indexOf(phrase);
+    if (idx === -1) continue;
+    const name = key.slice(idx + phrase.length).trim().replace(/^(the|a|an)\s+/i, '');
+    return name || null;
+  }
+  return null;
+}
+
+// ── Status polling — sync real Pi joint positions back to UI ───
+function updateDepthState(model) {
+  const el = document.getElementById('depthState');
+  if (!el || !model) return;
+  el.classList.remove('ready', 'fail');
+  setDepthButtonState(model);
+  const pins = document.getElementById('sensorPins');
+  if (pins && model.sda_pin != null && model.scl_pin != null) {
+    pins.textContent = `SDA=${model.sda_pin} · SCL=${model.scl_pin}`;
+  } else if (pins && model.trig_pin != null && model.echo_pin != null) {
+    pins.textContent = `${model.trig_pin} / ${model.echo_pin}`;
+  }
+  const clearEl = document.getElementById('sensorClearance');
+  if (clearEl && model.grasp_clearance_cm != null) {
+    clearEl.textContent = `${Number(model.grasp_clearance_cm).toFixed(1)} cm`;
+  }
+  if (model.enabled && model.ready && (model.measurement_ok)) {
+    const m = model.mount === 'down' ? '↓' : 'behind';
+    el.textContent = `VL53L0X ${m} ✓ OK`;
+    if (['forward', 'bottom', 'under', 'below', 'behind', 'gripper', 'ahead', 'camera'].includes(String(model.mount || '').toLowerCase())) {
+      el.textContent = 'VL53L0X forward ✓ OK';
+    }
+    el.classList.add('ready');
+  } else if (model.enabled && model.gpio_ok && !model.measurement_ok) {
+    el.textContent = 'VL53L0X: warming up';
+    el.classList.add('ready');
+  } else if (model.failed) {
+    el.textContent = 'VL53L0X: error';
+    el.classList.add('fail');
+  } else if (model.enabled) {
+    el.textContent = 'VL53L0X: starting';
+    el.classList.add('ready');
+  } else {
+    el.textContent = 'VL53L0X: off';
+    el.classList.add('fail');
+  }
+}
+
+function updateDepthResult(result) {
+  if (!result) return;
+  const distanceEl = document.getElementById('depthDistance');
+  const messageEl  = document.getElementById('depthMessage');
+  const pathEl     = document.getElementById('depthPath');
+  const reachEl    = document.getElementById('reachState');
+  const coordX     = document.getElementById('coord-x');
+  const coordY     = document.getElementById('coord-y');
+  const coordZ     = document.getElementById('coord-z');
+  const sensorRaw  = document.getElementById('sensorRaw');
+  const sensorEcho = document.getElementById('sensorEcho');
+  const sensorJaw  = document.getElementById('sensorJaw');
+  const sensorDescent = document.getElementById('sensorDescent');
+  const mountName = String(result.mount || '').toLowerCase();
+  const mountDown = ['down', 'vertical', 'table'].includes(mountName) || String(result.source || '').includes('down');
+  const mountBehind = ['forward', 'bottom', 'under', 'below', 'behind', 'gripper', 'ahead', 'camera'].includes(mountName) || String(result.source || '').includes('forward') || String(result.source || '').includes('behind');
+
+  // ── Distance & message ─────────────────────────────────────────
+  const distance = Number(result.distance_cm);
+  const jawDistance = Number(result.jaw_distance_cm);
+  const rawCm = Number(result.sensor_height_cm ?? result.sensor_raw_cm);
+  const echoUs = Number(result.last_measurement_us ?? result.sensor_echo_us);
+  const contactCm = Number(result.path && result.path.contact_cm);
+  const hasDist  = Number.isFinite(distance) && distance > 0;
+  const hasJaw = Number.isFinite(jawDistance) && jawDistance > 0;
+  const hasRaw = Number.isFinite(rawCm) && rawCm > 0;
+  const sensorCm = Number(result.sensor_raw_cm);
+  const hasSensor = Number.isFinite(sensorCm) && sensorCm > 0;
+  if (distanceEl) {
+    if (mountBehind && hasSensor) distanceEl.textContent = `${sensorCm.toFixed(1)} cm`;
+    else if (mountDown && hasRaw) distanceEl.textContent = `↓ ${rawCm.toFixed(1)} cm`;
+    else if (hasDist) distanceEl.textContent = `${distance.toFixed(1)} cm`;
+    else distanceEl.textContent = '-- cm';
+  }
+  if (sensorRaw) sensorRaw.textContent = hasSensor ? `${sensorCm.toFixed(1)} cm` : (hasRaw ? `${rawCm.toFixed(1)} cm` : '-- cm');
+  if (sensorEcho) sensorEcho.textContent = Number.isFinite(echoUs) && echoUs > 0 ? `${echoUs.toFixed(1)} µs` : '-- µs';
+  if (sensorJaw) sensorJaw.textContent = hasJaw ? `${jawDistance.toFixed(1)} cm` : '-- cm';
+  if (sensorDescent) {
+    const off = Number(result.camera_sensor_offset_cm ?? result.sensor_mount_offset_cm);
+    sensorDescent.textContent = Number.isFinite(off) && off > 0
+      ? `${off.toFixed(1)} cm` : '-- cm';
+  }
+  if (messageEl)  messageEl.textContent  = result.message || 'No sensor reading yet';
+
+  // ── Reach status ───────────────────────────────────────────────
+  if (reachEl) {
+    reachEl.classList.remove('ok', 'no');
+    if (result.in_reach === true) {
+      reachEl.textContent = 'IN REACH';
+      reachEl.classList.add('ok');
+    } else if (result.in_reach === false) {
+      reachEl.textContent = `OUT >${Number(result.reach_limit_cm || ROBOT_REACH_CM).toFixed(0)}cm`;
+      reachEl.classList.add('no');
+    } else {
+      reachEl.textContent = '--';
+    }
+  }
+
+  // ── XYZ coordinates ────────────────────────────────────────────
+  // FIX: fall back to distance_cm for Z when path.target_cm is absent
+  const p      = result.path || {};
+  _lastDepthPath = p && Object.keys(p).length ? p : _lastDepthPath;
+  const target = p.target_cm || {};
+  const hasXYZ = target.x_cm !== undefined && target.z_cm !== undefined;
+  updateObjectHeightReadout(null, p);
+  if (coordX) coordX.textContent = hasXYZ ? Number(target.x_cm).toFixed(1) : '--';
+  if (coordY) coordY.textContent = hasXYZ ? Number(target.y_cm || 0).toFixed(1) : '--';
+  if (coordZ) {
+    if (hasJaw)                    coordZ.textContent = jawDistance.toFixed(1);
+    else if (hasXYZ)               coordZ.textContent = Number(target.z_cm).toFixed(1);
+    else if (mountBehind && hasSensor) coordZ.textContent = sensorCm.toFixed(1);
+    else if (mountDown && hasRaw)  coordZ.textContent = rawCm.toFixed(1);
+    else if (hasDist)              coordZ.textContent = distance.toFixed(1);
+    else                           coordZ.textContent = '--';
+  }
+
+  // ── 3D path text ───────────────────────────────────────────────
+  // FIX: show partial data when full path is unavailable
+  if (pathEl) {
+    const hasFullPath = p.descent_deg !== undefined && target.z_cm !== undefined;
+    if (hasFullPath) {
+      const reachStatus    = p.is_reachable ? '✓ REACH' : '✗ OUT';
+      const shownDrop      = Number(p.execution_descent_deg ?? p.raw_descent_deg ?? p.descent_deg ?? 0);
+      const approachDrop   = Number(p.approach_arm_delta_deg || 0);
+      const extraDrop      = Number(p.extra_drop_deg || 0);
+      const finalDip       = Number(p.final_dip_deg || 0);
+      const totalDrop      = Number(p.total_drop_deg ?? (approachDrop + shownDrop + finalDip));
+      const dropParts      = [`${shownDrop.toFixed(1)}°`];
+      if (extraDrop > 0.05) dropParts.push(`+${extraDrop.toFixed(1)}`);
+      if (finalDip  > 0.05) dropParts.push(`dip${finalDip.toFixed(1)}`);
+      const dropText = totalDrop > shownDrop + 0.05
+        ? `${totalDrop.toFixed(1)}° (${dropParts.join(' ')})`
+        : `${shownDrop.toFixed(1)}°`;
+      const approachText = approachDrop > 0.05
+        ? `① approach ${approachDrop.toFixed(1)}°` : `① approach`;
+      const pathInfo = [
+        `x${Number(target.x_cm || 0).toFixed(1)} y${Number(target.y_cm || 0).toFixed(1)} z${Number(target.z_cm || 0).toFixed(1)}cm`,
+        p.corrected_object_height_cm != null ? `height ${Number(p.corrected_object_height_cm).toFixed(1)}cm` : null,
+        p.grab_height_cm != null ? `grab ${Number(p.grab_height_cm).toFixed(1)}cm up` : null,
+        approachText,
+        `② drop ${dropText}`,
+        `③ grip`,
+        `④ lift ${Number(p.lift_cm || 0).toFixed(1)}cm`,
+        reachStatus,
+      ].filter(Boolean);
+      if (p.depth_uncertainty_cm) pathInfo.push(`±${Number(p.depth_uncertainty_cm).toFixed(1)}cm`);
+      pathEl.textContent = pathInfo.join(' | ');
+    } else if (mountBehind && hasSensor) {
+      const reachTxt = result.in_reach === true  ? ' ✓ IN REACH'
+                     : result.in_reach === false ? ` ✗ OUT >${Number(result.reach_limit_cm || ROBOT_REACH_CM).toFixed(0)}cm`
+                     : '';
+      pathEl.textContent = `sensor ${sensorCm.toFixed(1)} cm → jaw ${hasJaw ? jawDistance.toFixed(1) : '--'} cm${reachTxt}`;
+    } else if (hasRaw && mountDown) {
+      const reachTxt = result.in_reach === true  ? ' ✓ IN REACH'
+                     : result.in_reach === false ? ` ✗ OUT >${Number(result.reach_limit_cm || ROBOT_REACH_CM).toFixed(0)}cm`
+                     : '';
+      pathEl.textContent = `height ↓ ${rawCm.toFixed(1)} cm | approach ${hasDist ? distance.toFixed(1) : '--'} cm${reachTxt}`;
+    } else if (hasDist) {
+      const reachTxt = result.in_reach === true  ? ' ✓ IN REACH'
+                     : result.in_reach === false ? ` ✗ OUT >${Number(result.reach_limit_cm || ROBOT_REACH_CM).toFixed(0)}cm`
+                     : '';
+      pathEl.textContent = `depth: ${distance.toFixed(1)} cm${reachTxt}`;
+    } else {
+      pathEl.textContent = 'path: --';
+    }
+  }
+
+  updateArm3DPath(result);
+}
+
+async function pollStatus() {
+  if (!piIp) return;
+  try {
+    const r = await fetch(apiUrl('/status'), { mode:'cors', cache:'no-store' });
+    if (r.ok) {
+      const d = await r.json();
+      setConnected(true);
+      mergeServerPosition(d.position);
+      _trackingActive = !!d.tracking;
+      _trackingObject = d.track_object || null;
+      updateTrackButton();
+      if (d.depth_model) updateDepthState(d.depth_model);
+      if (d.depth_result) updateDepthResult(d.depth_result);
+      if (d.grip_tune) updateGripTuneUI(d.grip_tune);
+      if (d.status) setStatus(d.status);
+      if (d.digital_twin) applyDigitalTwinConstants(d.digital_twin);
+    } else {
+      setConnected(false);
+    }
+  } catch {
+    setConnected(false);
+  }
+}
+
+function startPolling() {
+  clearInterval(pollTimer);
+  clearInterval(detPollTimer);
+  if (piIp) {
+    pollTimer    = setInterval(pollStatus,     STATUS_POLL_MS);
+    detPollTimer = setInterval(pollDetections, DET_POLL_MS);
+    // Poll immediately on connect
+    pollStatus();
+    pollDetections();
+    fetchCalibration();
+    fetchGripTune();
+    startGripperCurrentPoll();
+  }
+}
+
+// ── Gripper current polling ───────────────────────────────
+let _gripCurrentTimer = null;
+async function pollGripperCurrent() {
+  try {
+    const r = await fetch(apiUrl('/gripper_current'));
+    if (!r.ok) return;
+    const d = await r.json();
+    const ma = d.current_ma;
+    const el = document.getElementById('posGripCurrent');
+    if (el && ma !== undefined && ma !== null) {
+      el.textContent = `${ma.toFixed(1)} mA`;
+      el.style.color = ma > 100 ? '#ff5555' : ma > 50 ? '#ffb86c' : 'var(--cyan)';
+    }
+  } catch (_) {}
+}
+function startGripperCurrentPoll() {
+  clearInterval(_gripCurrentTimer);
+  _gripCurrentTimer = setInterval(pollGripperCurrent, 1000);
+  pollGripperCurrent();
+}
+
+// ── Send command — always update locally first, then Pi ────────
+async function sendCommand(cmd) {
+  // FIX: normalise key before cooldown check (trim + lowercase)
+  const key = cmd.trim().toLowerCase();
+  if (key === 'wrist left' || key === 'wrist right') {
+    applyLocally(key);
+    committedArm.wrist = arm.wrist;
+    await sendJoint('wrist', arm.wrist);
+    return;
+  }
+
+  const now = Date.now();
+  if (now - (cooldowns[key] || 0) < 350) return;  // 350ms matches min servo move time
+  cooldowns[key] = now;
+
+  // Grab/pickup routes to the dedicated /pickup endpoint
+  if (key === 'grab' || key.startsWith('grab ') || key.startsWith('pick')) {
+    const objName = objectNameFromCommand(key) || (_lastDets.length ? _lastDets[0].label : null);
+    await doPickup(objName);
+    return;
+  }
+
+  applyLocally(key);
+
+  if (!piIp) {
+    setConnected(false);
+    setStatus('Set the Pi IP in Settings first');
+    return;
+  }
+
+  setStatus(`Sending: ${key}…`);
+  try {
+    const r = await fetch(apiUrl('/command'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: key }),
+      mode: 'cors',
+      cache: 'no-store'
+    });
+    if (r.ok) {
+      const d = await r.json();
+      setConnected(true);
+      _trackingActive = !!d.tracking;
+      _trackingObject = d.track_object || null;
+      updateTrackButton();
+      setStatus(d.status || `OK: ${key}`);
+      if (key !== 'home' && key !== 'reset' && key !== 'center') {
+        mergeServerPosition(d.position);
+      }
+    } else {
+      setConnected(false);
+      setStatus(`Error ${r.status}`);
+    }
+  } catch (err) {
+    setConnected(false);
+    setStatus(`Pi unreachable: ${key}`);
+  }
+}
+
+let wristStopTimer = null;
+
+async function sendWristCommand(key, opts = {}) {
+  const updateLocal = opts.updateLocal !== false;
+  const useFallback = opts.fallback !== false;
+  const now = Date.now();
+  if (now - (cooldowns[key] || 0) < WRIST_STOP_DELAY_MS) return;
+  cooldowns[key] = now;
+
+  if (updateLocal) {
+    applyLocally(key);
+    committedArm.wrist = arm.wrist;
+  } else {
+    holdContinuousJoint('wrist');
+    syncUI();
+  }
+
+  if (!piIp) {
+    setConnected(false);
+    setStatus('Set the Pi IP in Settings first');
+    return;
+  }
+
+  clearTimeout(wristStopTimer);
+  holdContinuousJoint('wrist');
+  setStatus(`Sending: ${key}…`);
+  try {
+    const r = await fetch(apiUrl('/command'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: key }),
+      mode: 'cors',
+      cache: 'no-store'
+    });
+    if (r.ok) {
+      const d = await r.json();
+      setConnected(true);
+      setStatus(d.status || `OK: ${key}`);
+      mergeServerPosition(d.position);
+      if (useFallback) wristStopTimer = setTimeout(() => sendWristStopFallback(), WRIST_STOP_DELAY_MS);
+    } else {
+      setConnected(false);
+      setStatus(`Error ${r.status}`);
+    }
+  } catch (err) {
+    setConnected(false);
+    setStatus(`Pi unreachable: ${key}`);
+  }
+}
+
+async function sendWristStopFallback() {
+  if (!piIp) return;
+  try {
+    const r = await fetch(apiUrl('/joint'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ joint: 'wrist', angle: arm.wrist }),
+      mode: 'cors',
+      cache: 'no-store'
+    });
+    if (r.ok) {
+      setConnected(true);
+      const d = await r.json();
+      mergeServerPosition(d.position);
+    }
+  } catch {
+    // The server-side wrist command already sends stop; this is only a fallback.
+  }
+}
+
+async function sendContinuousJoint(joint, angle) {
+  if (!piIp) { setStatus('Set the Pi IP in Settings first'); return; }
+  setVisualHomePoseForced(false);
+  if (rejectUnsafeJointTarget(joint, angle, 'continuous joint')) return;
+  clearTimeout(wristStopTimer);
+  holdContinuousJoint(joint);
+  arm[joint] = Number(angle);
+  committedArm[joint] = arm[joint];
+  syncUI();
+  setStatus(`${joint}: ${Math.round(angle)}°`);
+  try {
+    const r = await fetch(apiUrl('/joint'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ joint, angle }),
+      mode: 'cors',
+      cache: 'no-store'
+    });
+    if (r.ok) {
+      setConnected(true);
+      const d = await r.json();
+      setStatus(d.status || `${joint}: ${Math.round(angle)}°`);
+      mergeServerPosition(d.position);
+      wristStopTimer = setTimeout(() => sendWristStopFallback(), WRIST_STOP_DELAY_MS);
+    } else {
+      setConnected(false);
+      setStatus(`Error ${r.status}`);
+    }
+  } catch (err) {
+    setConnected(false);
+    setStatus(`Pi unreachable: ${joint}`);
+  }
+}
+
+// ── Send joint ─────────────────────────────────────────────────
+async function sendJoint(joint, angle) {
+  if (CONTINUOUS_JOINTS.has(joint)) {
+    sendContinuousJoint(joint, angle);
+    return;
+  }
+  if (!piIp) { setStatus('Set the Pi IP in Settings first'); return; }
+  setVisualHomePoseForced(false);
+  if (rejectUnsafeJointTarget(joint, angle, 'joint')) return;
+  // FIX: previously this set committedArm[joint] to the requested angle
+  // unconditionally, and never rolled it back if the server rejected the
+  // move. That left the app's internal "current position" pointing at an
+  // angle the arm never actually reached, so every subsequent small nudge
+  // was computed relative to that phantom position — a real jump far
+  // bigger than intended — and kept getting rejected too, making the arm
+  // look permanently stuck after one rejection. Now we remember the
+  // pre-attempt value and restore it (and the visible sliders) on reject.
+  const prevAngle = Number.isFinite(committedArm[joint]) ? committedArm[joint] : arm[joint];
+  committedArm[joint] = Number(angle);
+  try {
+    const r = await fetch(apiUrl('/joint'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ joint, angle }),
+      mode: 'cors', cache: 'no-store'
+    });
+    if (r.ok) {
+      setConnected(true);
+      const d = await r.json();
+      setStatus(`${joint}: ${Math.round(angle)}°`);
+      mergeServerPosition(d.position);
+    } else if (r.status === 400) {
+      setConnected(true);
+      let msg = `Rejected: floor collision`;
+      try {
+        const err = await r.json();
+        if (err.error) msg = err.error;
+        if (err.segment) msg += ` (${err.segment})`;
+      } catch (_) {}
+      setStatus(msg, 'warning');
+      // FIX: roll back to the last confirmed-safe angle immediately so the
+      // next move is computed from the arm's real position, not the
+      // rejected one. pollStatus() below still runs to true-up against the
+      // server, but that alone isn't enough while a slider drag is active
+      // (mergeServerPosition skips joints mid-drag).
+      committedArm[joint] = prevAngle;
+      arm[joint] = prevAngle;
+      syncUI();
+      pollStatus();
+    } else {
+      setConnected(false);
+      setStatus(`Error ${r.status}`);
+    }
+  } catch (err) {
+    setConnected(false);
+    setStatus(`Pi unreachable: ${joint}`);
+  }
+}
+
+// ── Status helpers ─────────────────────────────────────────────
+// Sync physics constants from Pi /status (optional — defaults match server)
+function applyDigitalTwinConstants(dt) {
+  if (!dt || typeof dt !== 'object') return;
+  // Constants are const — log only; user reload picks up file defaults
+  if (dt.safety_margin_cm != null) {
+    console.debug('[digital-twin]', dt);
+  }
+}
+
+function setStatus(msg) {
+  const el = document.getElementById('statusTxt');
+  if (el) el.textContent = msg;
+
+  // ── Crosshair visual feedback during alignment ──────────────────
+  const cross   = document.getElementById('camCross');
+  const overlay = document.getElementById('alignOverlay');
+  if (cross && overlay) {
+    const lower = (msg || '').toLowerCase();
+    const isCentering = lower.includes('centering') || lower.includes('aligning') || lower.includes('camera align') || lower.includes('crosshair');
+    const isLocked    = lower.includes('centred') || lower.includes('centered') || lower.includes('locked') || lower.includes('crosshair locked');
+    const isFloor     = lower.includes('floor reached') || lower.includes('floor limit') || lower.includes('wrist for y');
+
+    // Parse X= Y= error values from status string like "X=+34px Y=-18px"
+    const xm = msg.match(/X=([+-]?\d+)px?/i);
+    const ym = msg.match(/Y=([+-]?\d+)px?/i);
+    const errX = xm ? parseInt(xm[1]) : null;
+    const errY = ym ? parseInt(ym[1]) : null;
+
+    if (isLocked) {
+      cross.className = 'crosshair locked';
+      overlay.className = 'align-overlay ok show';
+      overlay.textContent = '✓ CROSSHAIR LOCKED';
+    } else if (isCentering) {
+      cross.className = 'crosshair aligning';
+      if (errX !== null && errY !== null) {
+        const mag = Math.round(Math.sqrt(errX*errX + errY*errY));
+        overlay.className = 'align-overlay show';
+        overlay.textContent = `ALIGNING  X${errX >= 0 ? '+' : ''}${errX}  Y${errY >= 0 ? '+' : ''}${errY}  |err|=${mag}px${isFloor ? ' ⚠floor' : ''}`;
+      } else {
+        overlay.className = 'align-overlay show';
+        overlay.textContent = isFloor ? 'ALIGNING ⚠ ARM AT FLOOR LIMIT' : 'ALIGNING…';
+      }
+    } else {
+      // Clear alignment state
+      cross.className = 'crosshair';
+      overlay.className = 'align-overlay';
+    }
+  }
+  if (el) {
+    el.textContent = msg;
+    // Flash red when floor is reached so user notices immediately
+    const isFloorReached = (msg || '').toLowerCase().includes('floor reached');
+    el.classList.toggle('status-floor', isFloorReached);
+  }
+}
+
+function setConnected(ok) {
+  connected = ok;
+  const dot  = document.getElementById('connDot');
+  const hdot = document.getElementById('headerDot');
+  const lbl  = document.getElementById('connLabel');
+  if (dot)  { dot.style.background  = ok ? 'var(--green)' : 'var(--red)'; dot.style.boxShadow  = ok ? '0 0 6px var(--green)' : 'none'; }
+  if (hdot) { hdot.style.background = ok ? 'var(--green)' : 'var(--red)'; hdot.style.boxShadow = ok ? '0 0 6px var(--green)' : 'none'; }
+  if (lbl)  lbl.textContent = ok ? `Connected: ${piIp}` : (piIp ? 'Pi unreachable' : 'Pi not configured');
+  const notice = document.getElementById('noPiNotice');
+  if (notice) notice.style.display = ok ? 'none' : '';
+}
+
+// ── Settings ───────────────────────────────────────────────────
+function openSettings() {
+  document.getElementById('piIpInput').value = normalizePiHost(piIp);
+  document.getElementById('testResult').style.display = 'none';
+  document.getElementById('settingsModal').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('open');
+}
+function saveSettings() {
+  const ip = normalizePiHost(document.getElementById('piIpInput').value);
+  document.getElementById('piIpInput').value = ip;
+  piIp = ip;
+  localStorage.setItem('pi_ip', piIp);
+  document.getElementById('noPiNotice').style.display = piIp ? 'none' : '';
+  updateCam();
+  closeSettings();
+  startPolling();
+}
+async function testConnection() {
+  const ip = normalizePiHost(document.getElementById('piIpInput').value);
+  document.getElementById('piIpInput').value = ip;
+  if (!ip) return;
+  const btn = document.getElementById('testBtn');
+  btn.textContent = 'Testing…'; btn.disabled = true;
+  const res = document.getElementById('testResult');
+  res.style.display = 'none';
+  try {
+    const r = await fetch(`http://${ip}:8081/status`, { mode:'cors', cache:'no-store' });
+    if (r.ok) {
+      const d = await r.json();
+      res.className   = 'test-result test-ok';
+      const depth = d.depth_model && d.depth_model.ready ? `, depth: ${d.depth_model.model}` : '';
+      res.textContent = `✓ Connected! Arm status: ${d.status || 'OK'}${depth}`;
+    } else {
+      res.className   = 'test-result test-fail';
+      res.textContent = `✗ HTTP ${r.status} — server responded with an error`;
+    }
+  } catch {
+    res.className   = 'test-result test-fail';
+    res.textContent = `✗ Cannot reach ${ip}:8081 — check the Pi script is running, both devices are on the same WiFi, and use the bare IP from hostname -I`;
+  }
+  res.style.display = 'block';
+  btn.textContent = 'Test Connection'; btn.disabled = false;
+}
+
+document.getElementById('settingsModal').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+
+// ── Voice commands ─────────────────────────────────────────────
+const VOICE_COMMANDS = ['up','down','left','right','open','close','grip','release','wave','home','reset','center','stop','grab',
+  'wrist left','wrist right','move up','move down','go left','go right','rotate left','rotate right',
+  'open gripper','close gripper','open hand','close hand','pick up','pickup','grip softer','grip harder',
+  'gripper softer','gripper harder','softer gripper','harder gripper','120 align'];
+
+function matchVoiceCommand(text) {
+  const t = text.toLowerCase().trim();
+  // Exact match
+  if (VOICE_COMMANDS.includes(t)) return true;
+  // Check if any known command is contained in the text
+  for (const cmd of VOICE_COMMANDS) {
+    if (t.includes(cmd)) return true;
+  }
+  // Fuzzy: check if text is close to a command (Levenshtein <= 2)
+  for (const cmd of VOICE_COMMANDS) {
+    if (levenshtein(t, cmd) <= 2) return true;
+  }
+  return false;
+}
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const d = Array.from({length: m + 1}, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) d[i][0] = i;
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      d[i][j] = Math.min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+(a[i-1]!==b[j-1]?1:0));
+  return d[m][n];
+}
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+let listening = false;
+
+function toggleVoice() {
+  if (!SR) {
+    document.getElementById('transcript').textContent = 'Speech recognition requires Chrome or Edge.';
+    return;
+  }
+  if (listening) { rec?.stop(); return; }
+
+  rec = new SR();
+  rec.continuous     = true;
+  rec.interimResults = false;
+  rec.lang           = 'en-US';
+  rec.maxAlternatives = 3;
+
+  rec.onstart = () => {
+    listening = true;
+    document.getElementById('micBtn').classList.add('listening');
+    document.getElementById('micBtn').textContent    = '⬛';
+    document.getElementById('micStatus').textContent = 'Listening… speak now';
+    document.getElementById('transcript').textContent = '';
+  };
+  rec.onresult = (e) => {
+    let bestCmd = null;
+    let bestConf = 0;
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (!e.results[i].isFinal) continue;
+      // Try all alternatives to find a matching command
+      for (let a = 0; a < e.results[i].length; a++) {
+        const alt = e.results[i][a].transcript.trim().toLowerCase();
+        const altConf = e.results[i][a].confidence;
+        if (matchVoiceCommand(alt) && altConf > bestConf) {
+          bestCmd = alt;
+          bestConf = altConf;
+        }
+      }
+    }
+    document.getElementById('transcript').textContent = bestCmd ? `"${bestCmd}"` : '';
+    if (bestCmd) {
+      sendCommand(bestCmd);
+      listening = false;
+    }
+  };
+  rec.onerror = (e) => {
+    document.getElementById('transcript').textContent = e.error === 'not-allowed' ? 'Mic access denied.' : e.error;
+    listening = false;
+    stopMic();
+  };
+  rec.onend = () => {
+    // Auto-restart — Chrome sometimes drops the mic after silence
+    if (listening) {
+      setTimeout(() => { if (listening && rec) try { rec.start(); } catch(e) {} }, 300);
+    } else {
+      stopMic();
+    }
+  };
+  rec.start();
+}
+
+function stopMic() {
+  listening = false;
+  document.getElementById('micBtn').classList.remove('listening');
+  document.getElementById('micBtn').textContent    = '🎤';
+  document.getElementById('micStatus').textContent = 'Tap to speak';
+}
+
+// ── Emergency stop — bypasses cooldown, kills pickup on Pi immediately ────
+async function emergencyStop() {
+  // Kill cooldown so stop always fires even if something else was just sent
+  cooldowns['stop'] = 0;
+  setStatus('⛔ STOP sent…');
+  if (!piIp) { setStatus('⛔ STOP (no Pi configured)'); return; }
+  try {
+    const r = await fetch(apiUrl('/command'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: 'stop' }),
+      mode: 'cors', cache: 'no-store'
+    });
+    if (r.ok) {
+      const d = await r.json();
+      setConnected(true);
+      setStatus(d.status || '⛔ Stopped');
+      mergeServerPosition(d.position);
+    } else {
+      setStatus(`⛔ Stop error: ${r.status}`);
+    }
+  } catch {
+    setStatus('⛔ Stop: Pi unreachable');
+  }
+}
+
+// ── Pick Up button wiring ──────────────────────────────────────
+document.getElementById('pickBtn').onclick = function() {
+  const objName = _lastDets.length ? _lastDets[0].label : null;
+  doPickup(objName);
+};
+
+// ── Keyboard shortcuts ─────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const map = {
+    ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right',
+    KeyO:'open', KeyC:'close', KeyW:'wave', KeyH:'home', KeyG:'grab',
+  };
+  if (map[e.code]) { e.preventDefault(); sendCommand(map[e.code]); }
+});
+
+// ── Init ───────────────────────────────────────────────────────
+updateCam();
+// VL53L0X state syncs on first /status poll
+// BUG FIX: Don't initialize disabled - let first poll set correct state from server
+if (piIp) {
+  // Immediately poll once to sync depth state with server
+  pollStatus().catch(() => {});
+  setDepthButtonState({ enabled: false, ready: false, failed: false, loading: false });
+  document.getElementById('noPiNotice').style.display = 'none';
+  startPolling();
+} else {
+  setConnected(false);
+  setStatus('Set the Pi IP in Settings');
+  setTimeout(openSettings, 300);
+}
+</script>
+</body>
+</html>

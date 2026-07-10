@@ -1,0 +1,245 @@
+<h2 class="sr-only">Step-by-step setup guide for voice-controlled 4-DOF robot arm on Raspberry Pi 4B</h2>
+<style>
+  .g{padding:1rem 0;font-size:13px}
+  .toprow{display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem}
+  .toplbl{font-size:12px;color:var(--color-text-secondary)}
+  .pbar{height:3px;background:var(--color-background-secondary);border-radius:2px;margin-bottom:1.2rem}
+  .pfill{height:100%;background:#1D9E75;border-radius:2px;transition:width .3s}
+  .pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:1rem}
+  .pill{padding:4px 11px;font-size:11px;border:0.5px solid var(--color-border-secondary);border-radius:20px;background:var(--color-background-primary);color:var(--color-text-secondary);cursor:pointer;transition:all .15s}
+  .pill.on{background:#1D9E75;color:#fff;border-color:#1D9E75}
+  .pill:hover:not(.on){background:var(--color-background-secondary)}
+  .card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1.2rem 1.4rem}
+  .hdr{display:flex;gap:12px;align-items:flex-start;margin-bottom:1rem}
+  .num{width:34px;height:34px;border-radius:50%;background:#1D9E75;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0}
+  .ttl{font-size:15px;font-weight:500;color:var(--color-text-primary)}
+  .sub{font-size:12px;color:var(--color-text-secondary);margin-top:2px}
+  .tip{background:#E1F5EE;border-left:3px solid #1D9E75;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0;padding:.55rem .85rem;font-size:12px;color:#085041;margin:.65rem 0}
+  .warn{background:#FAEEDA;border-left:3px solid #BA7517;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0;padding:.55rem .85rem;font-size:12px;color:#633806;margin:.65rem 0}
+  .danger{background:#FBEAF0;border-left:3px solid #72243E;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0;padding:.55rem .85rem;font-size:12px;color:#72243E;margin:.65rem 0}
+  .code{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:.6rem .9rem;font-family:var(--font-mono);font-size:12px;color:var(--color-text-primary);margin:.55rem 0;white-space:pre;overflow-x:auto;line-height:1.6}
+  .chk{list-style:none;padding:0;margin:.6rem 0}
+  .chk li{display:flex;gap:8px;padding:4px 0;font-size:13px;color:var(--color-text-primary);align-items:flex-start}
+  .chk li span:first-child{color:#1D9E75;flex-shrink:0;font-size:14px;margin-top:1px}
+  .navrow{display:flex;justify-content:space-between;margin-top:1.2rem}
+  .btn{padding:7px 18px;font-size:12px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);cursor:pointer}
+  .btn:hover{background:var(--color-background-secondary)}
+  .btn.primary{background:#1D9E75;color:#fff;border-color:#1D9E75}
+  .btn:disabled{opacity:.3;cursor:default}
+  table.wt{width:100%;border-collapse:collapse;font-size:12px;margin:.6rem 0}
+  table.wt th{text-align:left;color:var(--color-text-secondary);font-weight:500;padding:4px 8px;border-bottom:0.5px solid var(--color-border-tertiary)}
+  table.wt td{padding:5px 8px;color:var(--color-text-primary);border-bottom:0.5px solid var(--color-border-tertiary)}
+  table.wt tr:last-child td{border-bottom:none}
+  .badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:500}
+  .bt{background:#E1F5EE;color:#085041}
+  .bb{background:#E6F1FB;color:#0C447C}
+  .ba{background:#FAEEDA;color:#633806}
+  .bp{background:#FBEAF0;color:#72243E}
+  .bgr{background:#F0E6FA;color:#4A1A6B}
+  .cmd-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:.6rem 0}
+  .cmd-item{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:6px 10px;font-size:12px}
+  .cmd-say{font-family:var(--font-mono);color:var(--color-text-primary);font-weight:500}
+  .cmd-desc{color:var(--color-text-secondary);margin-top:2px;font-size:11px}
+</style>
+
+<div class="g">
+  <div class="toprow">
+    <span class="toplbl">Step <span id="cs">1</span> of 8</span>
+    <span class="toplbl" id="sl"></span>
+  </div>
+  <div class="pbar"><div class="pfill" id="pf" style="width:12.5%"></div></div>
+  <div class="pills" id="pnav"></div>
+  <div class="card" id="sc"></div>
+</div>
+
+<script>
+const steps = [
+  {
+    title:"Install system packages",
+    sub:"Run on Pi 4B terminal — required before Python installs",
+    body:`<p style="font-size:13px;color:var(--color-text-secondary);margin:0 0 .6rem">Open a terminal on your Pi 4B and run:</p>
+<div class="code">sudo apt update && sudo apt upgrade -y
+sudo apt install portaudio19-dev espeak python3-pip i2c-tools -y</div>
+<ul class="chk">
+  <li><span>✓</span>portaudio19-dev — needed by PyAudio for microphone access</li>
+  <li><span>✓</span>espeak — text-to-speech engine</li>
+  <li><span>✓</span>i2c-tools — for INA219 current sensor (I2C)</li>
+</ul>
+<div class="tip">Enable I2C for the INA219 sensor: run <code>sudo raspi-config</code> → Interface Options → I2C → Enable. Then verify with <code>i2cdetect -y 1</code> — you should see address <code>40</code>.</div>
+<div class="warn">This project runs on Raspberry Pi 4B. All GPIO references use BCM numbering.</div>`
+  },
+  {
+    title:"Install Python packages",
+    sub:"All Python dependencies in one command",
+    body:`<div class="code">pip3 install ultralytics opencv-python lgpio SpeechRecognition pyaudio\\
+    adafruit-circuitpython-ina219 pyserial numpy</div>
+<ul class="chk">
+  <li><span>✓</span>ultralytics — YOLOv8n object detection</li>
+  <li><span>✓</span>SpeechRecognition + pyaudio — browser voice commands via web UI</li>
+  <li><span>✓</span>lgpio — Pi 4B GPIO control for servos and IBT-4 motor driver</li>
+  <li><span>✓</span>adafruit-circuitpython-ina219 — INA219 current sensor (gripper stall detection)</li>
+  <li><span>✓</span>pyserial — serial communication (if using Nano for any serial controllers)</li>
+</ul>
+<div class="tip">If pyaudio fails, make sure you ran <code>sudo apt install portaudio19-dev</code> first in Step 1.</div>
+<div class="danger">This project uses <code>lgpio</code> for GPIO control. It works on Pi 4B.</div>`
+  },
+  {
+    title:"Wire base and arm servos",
+    sub:"DEAO 20kg base + DS5160 60kg arm — both direct GPIO PWM",
+    body:`<table class="wt">
+  <tr><th>Joint</th><th>Servo</th><th>Control</th><th>Power</th></tr>
+  <tr><td>DOF1 Base</td><td>DEAO 20kg digital</td><td><span class="badge bt">GPIO 16</span> (servo PWM)</td><td><span class="badge ba">Ext 5–6V 3A+</span></td></tr>
+  <tr><td>DOF2 Arm</td><td>Pro-Range DS5160 60kgcm</td><td><span class="badge bb">GPIO 18</span> (servo PWM)</td><td><span class="badge ba">Ext 6V 5A+</span></td></tr>
+</table>
+<div class="warn">Never connect high-torque servos to the Pi's 5V pin. Use a dedicated 5–6V supply rated for your servos.</div>
+<ul class="chk">
+  <li><span>✓</span>Both servos use standard 50Hz servo PWM from the Pi's GPIO pins</li>
+  <li><span>✓</span>Signal wires go to their respective GPIO pins</li>
+  <li><span>✓</span>VCC wires go to external supply +</li>
+  <li><span>✓</span>GND wires go to common ground rail</li>
+</ul>
+<div class="tip">The DS5160 60kg servo is high-torque. Make sure your external supply can handle the current draw during movement.</div>`
+  },
+  {
+    title:"Wire wrist and gripper",
+    sub:"GS5508MG 55kg wrist + MG996R DC gripper on IBT-4",
+    body:`<table class="wt">
+  <tr><th>Joint</th><th>Motor</th><th>Control</th><th>Power</th></tr>
+  <tr><td>DOF3 Wrist</td><td>GS5508MG 55kg digital</td><td><span class="badge bt">GPIO 23</span> (servo PWM)</td><td><span class="badge ba">Ext 5–6V 3A+</span></td></tr>
+  <tr><td>DOF4 Gripper</td><td>MG996R DC motor (pot removed)</td><td><span class="badge bgr">IBT-4</span> RPWM=GPIO25 LPWM=GPIO26</td><td><span class="badge ba">Ext 5–6V 3A+</span></td></tr>
+</table>
+<p style="font-size:13px;color:var(--color-text-secondary);margin:.6rem 0 .4rem"><strong>Wrist servo wiring:</strong></p>
+<ul class="chk">
+  <li><span>✓</span>Signal → GPIO 23</li>
+  <li><span>✓</span>VCC → External 5–6V supply</li>
+  <li><span>✓</span>GND → Common ground with Pi</li>
+</ul>
+<p style="font-size:13px;color:var(--color-text-secondary);margin:.6rem 0 .4rem"><strong>Gripper DC motor wiring:</strong></p>
+<ul class="chk">
+  <li><span>✓</span>MG996R internal pot and control board removed — raw DC motor + gearbox</li>
+  <li><span>✓</span>Motor leads → IBT-4 (BTS7960) H-bridge output</li>
+  <li><span>✓</span>IBT-4 RPWM → GPIO 25 (open direction)</li>
+  <li><span>✓</span>IBT-4 LPWM → GPIO 26 (close direction)</li>
+  <li><span>✓</span>IBT-4 VCC → External 5–6V supply</li>
+  <li><span>✓</span>IBT-4 GND → Common ground with Pi</li>
+</ul>
+<div class="danger">All GND wires must connect to ONE common point: Pi GND, external supply GND, IBT-4 GND. Without this, signals won't work and you risk damage.</div>`
+  },
+  {
+    title:"Wire INA219 current sensor",
+    sub:"Detects gripper motor stall via current sensing",
+    body:`<table class="wt">
+  <tr><th>INA219 Pin</th><th>Connects To</th></tr>
+  <tr><td>VCC</td><td>Pi 3.3V</td></tr>
+  <tr><td>GND</td><td>Common GND</td></tr>
+  <tr><td>SCL</td><td>Pi GPIO 3 (SCL1)</td></tr>
+  <tr><td>SDA</td><td>Pi GPIO 2 (SDA1)</td></tr>
+  <tr><td>VIN+</td><td>External supply + (to gripper motor)</td></tr>
+  <tr><td>VIN−</td><td>IBT-4 VCC input</td></tr>
+</table>
+<p style="font-size:13px;color:var(--color-text-secondary);margin:.6rem 0 .4rem">The INA219 sits in series with the gripper motor power line. When the motor stalls (gripper closes on object), current spikes and the INA219 detects it.</p>
+<ul class="chk">
+  <li><span>✓</span>I2C address: 0x40 (default)</li>
+  <li><span>✓</span>Gain: 3 (±320mV shunt → ±1.6A range)</li>
+  <li><span>✓</span>Stall threshold: 500mA (configurable via GRIP_DC_CURRENT_LIMIT_MA)</li>
+</ul>
+<div class="tip">Verify the INA219 is detected: run <code>i2cdetect -y 1</code> — you should see device at address <code>40</code>. If not, check SDA/SCL wiring and I2C is enabled.</div>`
+  },
+  {
+    title:"Configure the server",
+    sub:"Environment variables and startup settings",
+    body:`<p style="font-size:13px;color:var(--color-text-secondary);margin:0 0 .4rem">Set these environment variables before running the server (or add to <code>~/.bashrc</code>):</p>
+<div class="code"># Gripper DC motor settings
+export ARM_GRIP_DC_MODE=1
+export ARM_GRIP_DC_SPEED=150           # PWM duty (0-255), lower = slower
+export ARM_GRIP_DC_CURRENT_LIMIT_MA=500  # mA stall threshold
+export ARM_GRIP_DC_STOP_SEC=3.0         # max run time (safety timeout)
+
+# Arm range (DS5160 servo)
+export ARM_MIN=90    # vertical UP
+export ARM_MAX=180   # near floor
+
+# Depth sensor
+export ARM_DEPTH_REACH_LIMIT_CM=34.0    # reject objects beyond this</div>
+<div class="tip">The web UI is at <code>http://&lt;PI_IP&gt;:8081</code>. Open in Chrome/Edge for full 3D visualization + voice commands.</div>
+<div class="warn">Server serves HTML from its own directory. After editing <code>arm_control_v11.html</code>, restart the server: <code>kill $(pgrep -f '10') && python3 "main.py"</code></div>`
+  },
+  {
+    title:"Run and test",
+    sub:"Launch server — all systems active",
+    body:`<div class="code">cd /path/to/your/project
+python3 "main.py"</div>
+<p style="font-size:13px;color:var(--color-text-secondary);margin:.6rem 0 .4rem">On startup:</p>
+<ul class="chk">
+  <li><span>1</span>GPIO pins claimed, IBT-4 gripper motor coasted</li>
+  <li><span>2</span>INA219 current sensor initialised (I2C 0x40)</li>
+  <li><span>3</span>All servos homed (base → 90°, arm → 90°, wrist → 90°), gripper open</li>
+  <li><span>4</span>Web server starts on port 8081</li>
+  <li><span>5</span>Camera + YOLO detector starts (if connected)</li>
+</ul>
+<p style="font-size:13px;color:var(--color-text-secondary);margin:.6rem 0 .4rem"><strong>Web UI features:</strong></p>
+<div class="cmd-grid">
+  <div class="cmd-item"><div class="cmd-say">Gripper buttons</div><div class="cmd-desc">OPEN / CLOSE / STOP for DC motor gripper</div></div>
+  <div class="cmd-item"><div class="cmd-say">"pick up [object]"</div><div class="cmd-desc">YOLO + IK autonomous pickup</div></div>
+  <div class="cmd-item"><div class="cmd-say">"wave"</div><div class="cmd-desc">Waves the arm</div></div>
+  <div class="cmd-item"><div class="cmd-say">3D visualization</div><div class="cmd-desc">Live Three.js model mirrors arm</div></div>
+  <div class="cmd-item"><div class="cmd-say">Sliders</div><div class="cmd-desc">Base (0-180°), Arm (90-180°), Wrist (0-180°)</div></div>
+  <div class="cmd-item"><div class="cmd-say">"home"</div><div class="cmd-desc">Returns all joints to home position</div></div>
+</div>
+<div class="tip">Use the Emergency STOP button (red) to immediately halt all motion and abort pickups.</div>`
+  },
+  {
+    title:"Troubleshoot",
+    sub:"Common issues and fixes",
+    body:`<table class="wt">
+  <tr><th>Problem</th><th>Fix</th></tr>
+  <tr><td>PyAudio install fails</td><td>Re-run: <code>sudo apt install portaudio19-dev -y</code></td></tr>
+  <tr><td>INA219 not detected</td><td>Enable I2C: <code>sudo raspi-config</code> → Interface Options → I2C. Check wiring SDA→GPIO2, SCL→GPIO3</td></tr>
+  <tr><td>Gripper moves wrong direction</td><td>Swap GRIP_RPWM_PIN and GRIP_LPWM_PIN in config, or swap physical wires on IBT-4</td></tr>
+  <tr><td>Gripper doesn't hold torque when stopped</td><td>Check _grip_dc_stop() hold=True is called after close. Adjust hold speed</td></tr>
+  <tr><td>Gripper closes slowly on startup</td><td>Ensure GRIP_DC_MODE=1 and _grip_dc_stop(hold=False) runs at startup</td></tr>
+  <tr><td>INA219 always reads 0mA</td><td>INA219 must be wired IN SERIES with motor power. Check VIN+/VIN− connections</td></tr>
+  <tr><td>Base servo jitters (analog MG996R)</td><td>Replace with digital servo (DEAO 20kg or similar)</td></tr>
+  <tr><td>GPIO error on startup</td><td>Run <code>sudo pigpiod</code> first, or try <code>sudo python3 "main.py"</code></td></tr>
+  <tr><td>YOLO too slow</td><td>Add <code>imgsz=320</code> to model() calls, or use YOLOv8n</td></tr>
+  <tr><td>Camera not found</td><td>Try <code>ls /dev/video*</code>. Set CAMERA_INDEX accordingly</td></tr>
+  <tr><td>Web page shows old buttons after code change</td><td>Hard refresh: Ctrl+F5. Server caches HTML at startup — restart it</td></tr>
+  <tr><td>Voice picks up "network" from silence</td><td>Browser SpeechRecognition limitation. Commands only fire on matched words</td></tr>
+  <tr><td>Pickup grabs bottom/top instead of center</td><td>Check gripper_x_cm calibration in Settings → Calibration</td></tr>
+</table>`
+  }
+];
+
+let cur = 0;
+const n = steps.length;
+
+function render() {
+  document.getElementById('cs').textContent = cur + 1;
+  document.getElementById('sl').textContent = steps[cur].sub;
+  document.getElementById('pf').style.width = ((cur + 1) / n * 100) + '%';
+  document.getElementById('pnav').innerHTML = steps.map(function(s, i) {
+    return '<button class="pill' + (i===cur?' on':'') + '" onclick="go(' + i + ')">' + (i+1) + '. ' + s.title.split(' ')[0] + '</button>';
+  }).join('');
+  var s = steps[cur];
+  document.getElementById('sc').innerHTML =
+    '<div class="hdr">' +
+      '<div class="num">' + (cur+1) + '</div>' +
+      '<div><div class="ttl">' + s.title + '</div><div class="sub">' + s.sub + '</div></div>' +
+    '</div>' +
+    s.body +
+    '<div class="navrow">' +
+      '<button class="btn" onclick="go(' + (cur-1) + ')"' + (cur===0?' disabled':'') + '>\u2190 Back</button>' +
+      (cur < n-1
+        ? '<button class="btn primary" onclick="go(' + (cur+1) + ')">Next \u2192</button>'
+        : '<button class="btn primary" onclick="sendPrompt(\'I finished setting up the voice-controlled arm, what should I try next?\')">Done \u2197</button>') +
+    '</div>';
+}
+
+function go(i) {
+  if (i < 0 || i >= n) return;
+  cur = i;
+  render();
+}
+
+render();
+</script>
