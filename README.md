@@ -26,7 +26,7 @@ Architecture
 The Pi runs a lightweight HTTP server hosting a single-page app with Three.js 3D rendering, voice recognition, and WebSocket communication. GPIO PWM drives servos directly. The IBT-4 H-bridge provides raw DC motor control for the gripper. Arduino Nano handles PID feedback for the arm joint via USB serial.
 
 
-The step up guide fiel has all the steppby step insrtion on how to use the arm 
+The step up guide file has all the step by step instructions on how to use the arm 
 Most of the code is written by ai 
 A picture of the arm
 <img width="1280" height="960" alt="image" src="https://github.com/user-attachments/assets/7e8faa0e-b6a1-4c9b-a225-ea019ae98b47" />
