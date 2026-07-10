@@ -30,13 +30,13 @@ The step up guide file has all the step by step instructions on how to use the a
 Most of the code is written by ai 
 A picture of the arm
 <img width="1280" height="960" alt="image" src="https://github.com/user-attachments/assets/7e8faa0e-b6a1-4c9b-a225-ea019ae98b47" />
-Using a heat sink plus a small fan for the the wrist GS5508MG 55kg servo
-on the intput of the power rail of srvo I am using 4700uf cap 
+The wrist GS5508MG 55 kg servo is cooled using a heatsink and a small fan.
+on the input of the power rail of servo I am using 4700 uf cap 
 and the external power supply of the servo is in this fashion
 Old computer psu 12v rail to--> a 600w setpdown buck conveter converting the 12v to 8.3v
 Picture of it 
 <img width="1280" height="960" alt="image" src="https://github.com/user-attachments/assets/cb526049-be0b-4acd-b3dd-a22dff7cb562" />
-And I using this gripper https://cults3d.com/en/3d-model/various/robot-gripper-flexible-servo-mg995-mg996r
+And I am using this gripper https://cults3d.com/en/3d-model/various/robot-gripper-flexible-servo-mg995-mg996r
 
-YT link of a vid of the arm doing a pickup 
+YT link of a vid of the arm doing a pickup
 https://youtube.com/shorts/Sn1J2pTnNGg?feature=share
