@@ -24,3 +24,7 @@ Safety — Floor collision avoidance, joint limit enforcement, emergency stop bu
 
 Architecture
 The Pi runs a lightweight HTTP server hosting a single-page app with Three.js 3D rendering, voice recognition, and WebSocket communication. GPIO PWM drives servos directly. The IBT-4 H-bridge provides raw DC motor control for the gripper. Arduino Nano handles PID feedback for the arm joint via USB serial.
+
+
+The step up guide fiel has all the steppby step insrtion on how to use the arm 
+Most of the code is written by ai 
