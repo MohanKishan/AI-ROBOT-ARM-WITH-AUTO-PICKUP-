@@ -1,4 +1,4 @@
-4-DOF Robot Arm with Real-Time 3D Visualization & Auto Pickup
+3D Printed 4-DOF Robot Arm with Real-Time 3D Visualization & Auto Pickup
 A Raspberry Pi 4B-controlled 4-DOF robot arm with a web-based 3D interface built on Three.js.
 
 Hardware
@@ -33,7 +33,16 @@ A picture of the arm.
 The wrist GS5508MG 55 kg servo is cooled using a heatsink and a small fan.
 on the input of the power rail of servo I am using 4700 uf cap.
 and the external power supply of the servo is in this fashion.
-Old computer psu 12v rail to--> a 600w setpdown buck conveter converting the 12v to 8.3v.
+Power Supply
+
+Old Computer PSU (12 V rail)
+        │
+        ▼
+600 W Buck Converter
+(12 V → 8.3 V)
+        │
+        ▼
+Servo Power Rail
 Picture of it 
 <img width="1280" height="960" alt="image" src="https://github.com/user-attachments/assets/cb526049-be0b-4acd-b3dd-a22dff7cb562" />
 
@@ -41,8 +50,9 @@ Picture of the web interface.
 <img width="1280" height="720" alt="WhatsApp Image 2026-07-08 at 8 11 39 PM" src="https://github.com/user-attachments/assets/2b393ebc-c6d7-482b-abf1-48a868ed2cb6" />
 
 
-And I am using this gripper, https://cults3d.com/en/3d-model/various/robot-gripper-flexible-servo-mg995-mg996r
+The robot arm uses this 3D-printable gripper:
+https://cults3d.com/en/3d-model/various/robot-gripper-flexible-servo-mg995-mg996r
 
 
-YT link of a vid of the arm doing a pickup
+YouTube Demo – Autonomous Object Pickup.
 https://youtube.com/shorts/Sn1J2pTnNGg?feature=share
