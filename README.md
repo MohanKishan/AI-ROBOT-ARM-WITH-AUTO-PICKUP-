@@ -55,4 +55,4 @@ https://cults3d.com/en/3d-model/various/robot-gripper-flexible-servo-mg995-mg996
 
 
 YouTube Demo – Autonomous Object Pickup.
-https://youtube.com/shorts/Sn1J2pTnNGg?feature=share
+https://youtube.com/shorts/DapBP4Frb9c
